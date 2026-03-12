@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { GripVertical, Pencil, Trash2 } from 'lucide-react'
+import { GripVertical, Pencil, Trash2, Download, Upload } from 'lucide-react'
 import type { Transaction } from '../types'
 import { Category, PALETTE_COLORS, EMOJI_PRESETS } from '../categories'
 import { CategoryIcon } from '../icons'
@@ -25,6 +25,45 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
   const { categories, addCategory, updateCategory, deleteCategory, reorderCategories, mergeInto, resetToDefaults } = useCategories()
   const [modal, setModal] = useState<Modal>(null)
   const [confirmReset, setConfirmReset] = useState<'mappings' | 'categories' | 'all' | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
+
+  function handleExport() {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      categories: localStorage.getItem('categories'),
+      merchantCategoryMap: localStorage.getItem('merchantCategoryMap'),
+      savings: localStorage.getItem('savings'),
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `finance-hub-backup-${new Date().toLocaleDateString('he-IL').replace(/\//g, '-')}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target?.result as string)
+        if (!data.version) throw new Error('קובץ לא תקין')
+        if (data.categories) localStorage.setItem('categories', data.categories)
+        if (data.merchantCategoryMap) localStorage.setItem('merchantCategoryMap', data.merchantCategoryMap)
+        if (data.savings) localStorage.setItem('savings', data.savings)
+        window.location.reload()
+      } catch {
+        setImportError('שגיאה בייבוא — ודא שהקובץ הוא קובץ גיבוי תקין')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
 
   // drag-and-drop state
   const dragIdx = useRef<number | null>(null)
@@ -129,6 +168,36 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
             )
           })}
         </div>
+      </section>
+
+      {/* ── Backup & Restore ── */}
+      <section style={s.section}>
+        <h2 style={s.sectionTitle}>גיבוי ושחזור</h2>
+        <p style={s.backupDesc}>ייצא את כל ההגדרות, הקטגוריות, המיפויים והחסכונות לקובץ. ניתן לייבא אותו בכל דפדפן או מכשיר.</p>
+        <div style={s.backupRow}>
+          <div style={s.backupItem}>
+            <span style={s.backupLabel}>ייצוא נתונים</span>
+            <span style={s.backupMeta}>הורד קובץ גיבוי של כל ההגדרות</span>
+            <button style={s.backupBtn} onClick={handleExport}>
+              <Download size={14} strokeWidth={1.75} /> ייצא
+            </button>
+          </div>
+          <div style={s.backupItem}>
+            <span style={s.backupLabel}>ייבוא נתונים</span>
+            <span style={s.backupMeta}>שחזר מקובץ גיבוי — יחליף את הנתונים הנוכחיים</span>
+            <button style={s.backupBtn} onClick={() => importRef.current?.click()}>
+              <Upload size={14} strokeWidth={1.75} /> ייבא
+            </button>
+            <input
+              ref={importRef}
+              type="file"
+              accept=".json"
+              style={{ display: 'none' }}
+              onChange={handleImport}
+            />
+          </div>
+        </div>
+        {importError && <p style={s.importError}>{importError}</p>}
       </section>
 
       {/* ── General Settings ── */}
@@ -497,4 +566,11 @@ const s: Record<string, React.CSSProperties> = {
   radioGroup: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px 0' },
   radioRow: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' },
   reassignSelect: { padding: '3px 8px', border: '1px solid var(--border)', borderRadius: '6px', fontFamily: 'inherit', fontSize: '13px', background: 'var(--bg-surface)', direction: 'rtl' },
+  backupDesc: { margin: '0 0 16px', fontSize: '13px', color: 'var(--text-muted)' },
+  backupRow: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
+  backupItem: { flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px', background: 'var(--bg-primary)', borderRadius: '12px' },
+  backupLabel: { fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' },
+  backupMeta: { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' },
+  backupBtn: { display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start', padding: '7px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
+  importError: { margin: '8px 0 0', fontSize: '13px', color: 'var(--red)' },
 }
