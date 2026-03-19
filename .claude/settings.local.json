@@ -4,7 +4,15 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "WebFetch(domain:skills.sh)",
-      "Bash(npx skills:*)"
+      "Bash(npx skills:*)",
+      "Bash(find /c/Users/yakij/Projects/finance-hub -name \"*ISRACARD*\" -o -name \"*FORMAT*\" 2>/dev/null | head -20)",
+      "Bash(node -e \"console.log\\('חובה\\(₪\\)'.includes\\('חובה'\\)\\)\")",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:www.openbankingtracker.com)",
+      "WebSearch",
+      "Bash(git checkout:*)",
+      "Bash(git remote:*)"
     ]
   }
 }

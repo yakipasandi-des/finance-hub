@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { GripVertical, Pencil, Trash2, Download, Upload } from 'lucide-react'
+import { GripVertical, Pencil, Trash2, Download, Upload, ChevronDown, ChevronLeft } from 'lucide-react'
 import type { Transaction } from '../types'
-import { Category, PALETTE_COLORS, EMOJI_PRESETS } from '../categories'
+import { Category, PALETTE_COLORS, EMOJI_PRESETS, getParentCategories, getChildCategories, buildCategoryTree } from '../categories'
 import { CategoryIcon } from '../icons'
 import { useCategories } from '../context/CategoriesContext'
 
@@ -14,7 +14,7 @@ interface SettingsTabProps {
 
 type Modal =
   | null
-  | { type: 'add' }
+  | { type: 'add'; parentId?: string }
   | { type: 'edit'; category: Category }
   | { type: 'delete'; category: Category }
 
@@ -27,6 +27,7 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
   const [confirmReset, setConfirmReset] = useState<'mappings' | 'categories' | 'all' | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
+  const [expandedParent, setExpandedParent] = useState<string | null>(null)
 
   function handleExport() {
     const data = {
@@ -35,6 +36,10 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
       categories: localStorage.getItem('categories'),
       merchantCategoryMap: localStorage.getItem('merchantCategoryMap'),
       savings: localStorage.getItem('savings'),
+      budgets: localStorage.getItem('budgets'),
+      manualEntries: localStorage.getItem('manualEntries'),
+      bankEntries: localStorage.getItem('bankEntries'),
+      bankSettings: localStorage.getItem('bankSettings'),
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -56,6 +61,10 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
         if (data.categories) localStorage.setItem('categories', data.categories)
         if (data.merchantCategoryMap) localStorage.setItem('merchantCategoryMap', data.merchantCategoryMap)
         if (data.savings) localStorage.setItem('savings', data.savings)
+        if (data.budgets) localStorage.setItem('budgets', data.budgets)
+        if (data.manualEntries) localStorage.setItem('manualEntries', data.manualEntries)
+        if (data.bankEntries) localStorage.setItem('bankEntries', data.bankEntries)
+        if (data.bankSettings) localStorage.setItem('bankSettings', data.bankSettings)
         window.location.reload()
       } catch {
         setImportError('שגיאה בייבוא — ודא שהקובץ הוא קובץ גיבוי תקין')
@@ -65,42 +74,73 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
     e.target.value = ''
   }
 
-  // drag-and-drop state
+  // Build category tree for hierarchical display
+  const tree = buildCategoryTree(categories)
+
+  // Stats per category (with optional children aggregation)
+  function merchantCount(catId: string, includeChildren = false) {
+    let count = Object.values(map).filter((v) => v === catId).length
+    if (includeChildren) {
+      for (const child of getChildCategories(catId, categories)) {
+        count += Object.values(map).filter((v) => v === child.id).length
+      }
+    }
+    return count
+  }
+  function categorySpend(catId: string, includeChildren = false) {
+    let spend = allTransactions.filter((tx) => map[tx.merchant] === catId).reduce((s, t) => s + t.amount, 0)
+    if (includeChildren) {
+      for (const child of getChildCategories(catId, categories)) {
+        spend += allTransactions.filter((tx) => map[tx.merchant] === child.id).reduce((s, t) => s + t.amount, 0)
+      }
+    }
+    return spend
+  }
+
+  function toggleCollapse(parentId: string) {
+    setExpandedParent((prev) => prev === parentId ? null : parentId)
+  }
+
+  // drag-and-drop state — operates on flat list of parents only
   const dragIdx = useRef<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
 
-  const sorted = [...categories].sort((a, b) => a.sortOrder - b.sortOrder)
-
-  // Stats per category
-  function merchantCount(catId: string) {
-    return Object.values(map).filter((v) => v === catId).length
-  }
-  function categorySpend(catId: string) {
-    return allTransactions.filter((tx) => map[tx.merchant] === catId).reduce((s, t) => s + t.amount, 0)
-  }
-
-  // Drag handlers
-  function onDragStart(idx: number) { dragIdx.current = idx }
-  function onDragOver(e: React.DragEvent, idx: number) { e.preventDefault(); setDragOverIdx(idx) }
-  function onDrop(idx: number) {
+  // Drag handlers for parent reordering
+  function onDragStartParent(idx: number) { dragIdx.current = idx }
+  function onDragOverParent(e: React.DragEvent, idx: number) { e.preventDefault(); setDragOverIdx(idx) }
+  function onDropParent(idx: number) {
     const from = dragIdx.current
     if (from === null || from === idx) { setDragOverIdx(null); return }
-    const next = [...sorted]
-    const [moved] = next.splice(from, 1)
-    next.splice(idx, 0, moved)
-    reorderCategories(next)
+    const parents = tree.map((n) => n.parent)
+    const [moved] = parents.splice(from, 1)
+    parents.splice(idx, 0, moved)
+    // Rebuild full list: parents in new order with their children
+    const flat: Category[] = []
+    for (const p of parents) {
+      flat.push(p)
+      flat.push(...getChildCategories(p.id, categories))
+    }
+    reorderCategories(flat)
     dragIdx.current = null
     setDragOverIdx(null)
   }
 
   // Delete handler — merges or uncategorizes merchants
-  function handleDelete(catId: string, reassignTo: string | null) {
-    // Find all merchants mapped to this category
-    const merchants = Object.entries(map).filter(([, v]) => v === catId).map(([k]) => k)
-    for (const merchant of merchants) {
-      setMapping(merchant, reassignTo)
+  function handleDelete(catId: string, reassignTo: string | null, promoteChildren?: boolean) {
+    // Find all merchants mapped to this category (and children if not promoting)
+    const idsToReassign = [catId]
+    if (!promoteChildren) {
+      for (const child of getChildCategories(catId, categories)) {
+        idsToReassign.push(child.id)
+      }
     }
-    deleteCategory(catId)
+    for (const id of idsToReassign) {
+      const merchants = Object.entries(map).filter(([, v]) => v === id).map(([k]) => k)
+      for (const merchant of merchants) {
+        setMapping(merchant, reassignTo)
+      }
+    }
+    deleteCategory(catId, promoteChildren)
     setModal(null)
   }
 
@@ -127,43 +167,86 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
         </div>
 
         <div style={s.list}>
-          {sorted.map((cat, idx) => {
-            const count = merchantCount(cat.id)
-            const spend = categorySpend(cat.id)
-            const isDragOver = dragOverIdx === idx
+          {tree.map((node, parentIdx) => {
+            const { parent, children } = node
+            const hasChildren = children.length > 0
+            const isCollapsed = expandedParent !== parent.id
+            const count = merchantCount(parent.id, hasChildren)
+            const spend = categorySpend(parent.id, hasChildren)
+            const isDragOver = dragOverIdx === parentIdx
+
             return (
-              <div
-                key={cat.id}
-                draggable
-                onDragStart={() => onDragStart(idx)}
-                onDragOver={(e) => onDragOver(e, idx)}
-                onDrop={() => onDrop(idx)}
-                onDragEnd={() => setDragOverIdx(null)}
-                style={{
-                  ...s.row,
-                  ...(isDragOver ? s.rowDragOver : {}),
-                }}
-              >
-                <span style={s.dragHandle} title="גרור לשינוי סדר"><GripVertical size={16} strokeWidth={1.75} /></span>
-                <span style={{ ...s.catIcon, color: cat.color }}><CategoryIcon icon={cat.icon} size={18} /></span>
-                <div style={s.catInfo}>
-                  <span style={s.catName}>{cat.name}</span>
-                  <span style={s.catMeta}>
-                    {count > 0
-                      ? `${count} בתי עסק · ₪${Math.round(spend).toLocaleString('he-IL')}`
-                      : 'אין בתי עסק ממופים'}
-                  </span>
+              <div key={parent.id}>
+                {/* Parent row */}
+                <div
+                  draggable
+                  onDragStart={() => onDragStartParent(parentIdx)}
+                  onDragOver={(e) => onDragOverParent(e, parentIdx)}
+                  onDrop={() => onDropParent(parentIdx)}
+                  onDragEnd={() => setDragOverIdx(null)}
+                  style={{
+                    ...s.row,
+                    ...(isDragOver ? s.rowDragOver : {}),
+                  }}
+                >
+                  <span style={s.dragHandle} title="גרור לשינוי סדר"><GripVertical size={16} strokeWidth={1.75} /></span>
+                  {hasChildren && (
+                    <button style={s.collapseBtn} onClick={() => toggleCollapse(parent.id)} title={isCollapsed ? 'הרחב' : 'כווץ'}>
+                      {isCollapsed ? <ChevronLeft size={14} strokeWidth={2} /> : <ChevronDown size={14} strokeWidth={2} />}
+                    </button>
+                  )}
+                  <span style={{ ...s.catIcon, color: parent.color }}><CategoryIcon icon={parent.icon} size={18} /></span>
+                  <div style={s.catInfo}>
+                    <span style={s.catName}>{parent.name}</span>
+                    <span style={s.catMeta}>
+                      {count > 0
+                        ? `${count} בתי עסק · ₪${Math.round(spend).toLocaleString('he-IL')}`
+                        : 'אין בתי עסק ממופים'}
+                    </span>
+                  </div>
+                  <div style={s.rowActions}>
+                    <button style={s.iconBtn} onClick={() => setModal({ type: 'add', parentId: parent.id })} title="הוסף תת-קטגוריה">+</button>
+                    <button style={s.iconBtn} onClick={() => setModal({ type: 'edit', category: parent })} title="עריכה"><Pencil size={14} strokeWidth={1.75} /></button>
+                    <button
+                      style={{ ...s.iconBtn, ...(parent.id === 'other' ? s.iconBtnDisabled : {}) }}
+                      onClick={() => parent.id !== 'other' && setModal({ type: 'delete', category: parent })}
+                      title={parent.id === 'other' ? 'לא ניתן למחוק קטגוריית ברירת מחדל' : 'מחיקה'}
+                    >
+                      <Trash2 size={14} strokeWidth={1.75} />
+                    </button>
+                  </div>
                 </div>
-                <div style={s.rowActions}>
-                  <button style={s.iconBtn} onClick={() => setModal({ type: 'edit', category: cat })} title="עריכה"><Pencil size={14} strokeWidth={1.75} /></button>
-                  <button
-                    style={{ ...s.iconBtn, ...(cat.id === 'other' ? s.iconBtnDisabled : {}) }}
-                    onClick={() => cat.id !== 'other' && setModal({ type: 'delete', category: cat })}
-                    title={cat.id === 'other' ? 'לא ניתן למחוק קטגוריית ברירת מחדל' : 'מחיקה'}
-                  >
-                    <Trash2 size={14} strokeWidth={1.75} />
-                  </button>
-                </div>
+
+                {/* Children rows */}
+                {hasChildren && !isCollapsed && children.map((child) => {
+                  const childCount = merchantCount(child.id)
+                  const childSpend = categorySpend(child.id)
+                  return (
+                    <div
+                      key={child.id}
+                      style={{
+                        ...s.row,
+                        paddingRight: 44,
+                        borderRight: `3px solid ${parent.color}40`,
+                        background: 'var(--bg-surface)',
+                      }}
+                    >
+                      <span style={{ ...s.catIcon, color: child.color }}><CategoryIcon icon={child.icon} size={16} /></span>
+                      <div style={s.catInfo}>
+                        <span style={{ ...s.catName, fontSize: '13px' }}>{child.name}</span>
+                        <span style={s.catMeta}>
+                          {childCount > 0
+                            ? `${childCount} בתי עסק · ₪${Math.round(childSpend).toLocaleString('he-IL')}`
+                            : 'אין בתי עסק ממופים'}
+                        </span>
+                      </div>
+                      <div style={s.rowActions}>
+                        <button style={s.iconBtn} onClick={() => setModal({ type: 'edit', category: child })} title="עריכה"><Pencil size={14} strokeWidth={1.75} /></button>
+                        <button style={s.iconBtn} onClick={() => setModal({ type: 'delete', category: child })} title="מחיקה"><Trash2 size={14} strokeWidth={1.75} /></button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )
           })}
@@ -232,7 +315,9 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
           mode="add"
           existingNames={categories.map((c) => c.name)}
           usedColors={categories.map((c) => c.color)}
-          onSubmit={(name, icon, color) => { addCategory(name, icon, color); setModal(null) }}
+          parentCategories={getParentCategories(categories)}
+          initialParentId={modal.parentId}
+          onSubmit={(name, icon, color, parentId) => { addCategory(name, icon, color, parentId); setModal(null) }}
           onCancel={() => setModal(null)}
         />
       )}
@@ -243,8 +328,10 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
           initial={modal.category}
           existingNames={categories.filter((c) => c.id !== modal.category.id).map((c) => c.name)}
           usedColors={[]}
+          parentCategories={getParentCategories(categories).filter((c) => c.id !== modal.category.id)}
+          hasChildren={getChildCategories(modal.category.id, categories).length > 0}
           otherCategories={categories.filter((c) => c.id !== modal.category.id)}
-          onSubmit={(name, icon, color) => { updateCategory(modal.category.id, { name, icon, color }); setModal(null) }}
+          onSubmit={(name, icon, color, parentId) => { updateCategory(modal.category.id, { name, icon, color, parentId }); setModal(null) }}
           onMerge={(toId) => handleMerge(modal.category.id, toId)}
           onCancel={() => setModal(null)}
         />
@@ -254,8 +341,9 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
         <DeleteDialog
           category={modal.category}
           merchantCount={merchantCount(modal.category.id)}
-          otherCategories={categories.filter((c) => c.id !== modal.category.id)}
-          onConfirm={(reassignTo) => handleDelete(modal.category.id, reassignTo)}
+          childCount={getChildCategories(modal.category.id, categories).length}
+          otherCategories={categories.filter((c) => c.id !== modal.category.id && !c.parentId)}
+          onConfirm={(reassignTo, promoteChildren) => handleDelete(modal.category.id, reassignTo, promoteChildren)}
           onCancel={() => setModal(null)}
         />
       )}
@@ -294,20 +382,27 @@ interface CategoryFormModalProps {
   initial?: Category
   existingNames: string[]
   usedColors: string[]
+  parentCategories?: Category[]
+  initialParentId?: string
+  hasChildren?: boolean
   otherCategories?: Category[]
-  onSubmit: (name: string, icon: string, color: string) => void
+  onSubmit: (name: string, icon: string, color: string, parentId?: string) => void
   onMerge?: (toId: string) => void
   onCancel: () => void
 }
 
 function CategoryFormModal({
   mode, initial, existingNames, usedColors,
+  parentCategories = [], initialParentId, hasChildren,
   otherCategories = [], onSubmit, onMerge, onCancel,
 }: CategoryFormModalProps) {
   const firstUnused = PALETTE_COLORS.find((c) => !usedColors.includes(c)) ?? PALETTE_COLORS[0]
+  const defaultParentId = initialParentId ?? initial?.parentId ?? ''
+  const parentCat = parentCategories.find((c) => c.id === defaultParentId)
   const [name, setName] = useState(initial?.name ?? '')
-  const [icon, setIcon] = useState(initial?.icon ?? 'Package')
-  const [color, setColor] = useState(initial?.color ?? firstUnused)
+  const [icon, setIcon] = useState(initial?.icon ?? parentCat?.icon ?? 'Package')
+  const [color, setColor] = useState(initial?.color ?? parentCat?.color ?? firstUnused)
+  const [parentId, setParentId] = useState(defaultParentId)
   const [mergeTarget, setMergeTarget] = useState('')
   const [nameError, setNameError] = useState('')
 
@@ -317,7 +412,7 @@ function CategoryFormModal({
     if (existingNames.map((n) => n.toLowerCase()).includes(trimmed.toLowerCase())) {
       setNameError('שם זה כבר קיים'); return
     }
-    onSubmit(trimmed, icon, color)
+    onSubmit(trimmed, icon, color, parentId || undefined)
   }
 
   return (
@@ -334,6 +429,28 @@ function CategoryFormModal({
         autoFocus
       />
       {nameError && <p style={s.fieldError}>{nameError}</p>}
+
+      {/* Parent category selector */}
+      {parentCategories.length > 0 && !hasChildren && (
+        <>
+          <label style={s.fieldLabel}>קטגוריה אב</label>
+          <select
+            value={parentId}
+            onChange={(e) => setParentId(e.target.value)}
+            style={s.input}
+          >
+            <option value="">ללא (קטגוריה ראשית)</option>
+            {parentCategories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </>
+      )}
+      {hasChildren && (
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+          לא ניתן להפוך לתת-קטגוריה — יש תת-קטגוריות קיימות
+        </p>
+      )}
 
       {/* Icon picker */}
       <label style={s.fieldLabel}>אייקון</label>
@@ -404,16 +521,18 @@ function CategoryFormModal({
 // DeleteDialog
 // ---------------------------------------------------------------------------
 function DeleteDialog({
-  category, merchantCount, otherCategories, onConfirm, onCancel,
+  category, merchantCount, childCount, otherCategories, onConfirm, onCancel,
 }: {
   category: Category
   merchantCount: number
+  childCount: number
   otherCategories: Category[]
-  onConfirm: (reassignTo: string | null) => void
+  onConfirm: (reassignTo: string | null, promoteChildren?: boolean) => void
   onCancel: () => void
 }) {
   const [mode, setMode] = useState<'reassign' | 'uncat'>('uncat')
   const [target, setTarget] = useState(otherCategories[0]?.id ?? '')
+  const [childAction, setChildAction] = useState<'delete' | 'promote'>('promote')
 
   return (
     <Overlay onClose={onCancel}>
@@ -421,6 +540,21 @@ function DeleteDialog({
       <p style={s.deleteDesc}>
         למחוק את <strong>"{category.name}"</strong>?
       </p>
+      {childCount > 0 && (
+        <>
+          <p style={s.deleteCount}>{childCount} תת-קטגוריות שייכות לקטגוריה זו. מה לעשות עמן?</p>
+          <div style={s.radioGroup}>
+            <label style={s.radioRow}>
+              <input type="radio" checked={childAction === 'promote'} onChange={() => setChildAction('promote')} />
+              <span>הפוך לקטגוריות ראשיות</span>
+            </label>
+            <label style={s.radioRow}>
+              <input type="radio" checked={childAction === 'delete'} onChange={() => setChildAction('delete')} />
+              <span>מחק גם אותן</span>
+            </label>
+          </div>
+        </>
+      )}
       {merchantCount > 0 && (
         <>
           <p style={s.deleteCount}>{merchantCount} בתי עסק ממופים לקטגוריה זו. מה לעשות עמם?</p>
@@ -449,7 +583,7 @@ function DeleteDialog({
         <button style={s.cancelBtn} onClick={onCancel}>ביטול</button>
         <button
           style={{ ...s.submitBtn, background: 'var(--red)' }}
-          onClick={() => onConfirm(mode === 'reassign' ? target : null)}
+          onClick={() => onConfirm(mode === 'reassign' ? target : null, childAction === 'promote')}
         >
           מחק
         </button>
@@ -529,6 +663,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   rowDragOver: { background: '#ede9f8', outline: '2px dashed var(--accent)' },
   dragHandle: { fontSize: '16px', color: 'var(--text-faint)', cursor: 'grab', flexShrink: 0 },
+  collapseBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-faint)', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center' },
   catIcon: { fontSize: '20px', flexShrink: 0 },
   catInfo: { flex: 1, display: 'flex', flexDirection: 'column', gap: '1px', overflow: 'hidden' },
   catName: { fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' },

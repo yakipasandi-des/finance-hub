@@ -40,7 +40,7 @@ export function HelpTooltip({ text }: HelpTooltipProps) {
             bottom: 'calc(100% + 10px)',
             right: '50%',
             transform: 'translateX(50%)',
-            background: 'rgba(45,38,64,0.93)',
+            background: '#2d2640',
             color: '#f0edf8',
             fontSize: '12px',
             fontWeight: 400,
@@ -65,7 +65,7 @@ export function HelpTooltip({ text }: HelpTooltipProps) {
               transform: 'translateX(50%) rotate(45deg)',
               width: '8px',
               height: '8px',
-              background: 'rgba(28,25,23,0.93)',
+              background: '#2d2640',
             }}
           />
         </span>

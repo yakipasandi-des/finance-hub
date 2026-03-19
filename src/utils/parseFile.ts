@@ -1,6 +1,6 @@
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
-import type { Transaction } from '../types'
+import type { Transaction, BankEntry } from '../types'
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -28,7 +28,7 @@ function parseAmount(raw: unknown): number {
 function normalize(s: unknown): string {
   return String(s ?? '')
     .trim()
-    .replace(/\u200f/g, '') // strip RTL mark
+    .replace(/[\u200f\u200e\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069\u061c]/g, '') // strip bidi marks
     .replace(/"/g, '')
 }
 
@@ -112,6 +112,160 @@ function parseIsracardXlsx(buffer: ArrayBuffer): Transaction[] {
 
   console.log(`[Parser] Extracted ${transactions.length} transactions`)
   return transactions
+}
+
+// ---------------------------------------------------------------------------
+// Bank account XLSX parser
+// Detects bank format by scanning for headers like "בפועל/צפוי", "סוג תשלום/תקבול"
+// ---------------------------------------------------------------------------
+
+const BANK_HEADER_VARIANTS: Record<string, string[]> = {
+  date: ['תאריך'],
+  status: ['בפועל/ צפוי', 'בפועל/צפוי', 'בפועל / צפוי', 'סטטוס'],
+  category: ['סוג תשלום/תקבול', 'סוג תשלום / תקבול', 'סוג'],
+  vendor: ['שם ספק/לקוח', 'שם ספק / לקוח', 'ספק', 'לקוח', 'תיאור פעולה'],
+  payment: ['תשלומים', 'חובה'],
+  receipt: ['תקבולות', 'זכות'],
+  balance: ['יתרה משוערכת', 'יתרה'],
+}
+
+function parseBankDate(raw: unknown): Date | null {
+  // Handle Excel serial date numbers
+  if (typeof raw === 'number' && raw > 30000 && raw < 100000) {
+    // Excel serial: days since 1900-01-01 (with the 1900 leap year bug)
+    const excelEpoch = new Date(1899, 11, 30) // Dec 30, 1899
+    const date = new Date(excelEpoch.getTime() + raw * 86400000)
+    return isNaN(date.getTime()) ? null : date
+  }
+  const s = String(raw ?? '').trim()
+  // DD/MM/YYYY or DD.MM.YYYY
+  const match = s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/)
+  if (!match) return null
+  const [, d, m, y] = match
+  const year = y.length === 2 ? 2000 + parseInt(y) : parseInt(y)
+  const date = new Date(year, parseInt(m) - 1, parseInt(d))
+  return isNaN(date.getTime()) ? null : date
+}
+
+function detectBankHeaders(rows: unknown[][]): { headerRow: number; colMap: Record<string, number> } | null {
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = rows[i]
+    if (!row || row.length < 4) continue
+
+    const cells = row.map((c) => normalize(c))
+
+    // Check if this row contains bank-specific headers
+    const hasStatus = cells.some((c) => BANK_HEADER_VARIANTS.status.some((v) => c.includes(normalize(v))))
+    const hasPayment = cells.some((c) => BANK_HEADER_VARIANTS.payment.some((v) => c.includes(normalize(v))))
+
+    if (hasStatus || hasPayment) {
+      const colMap: Record<string, number> = {}
+      for (const [field, variants] of Object.entries(BANK_HEADER_VARIANTS)) {
+        for (let j = 0; j < cells.length; j++) {
+          if (variants.some((v) => cells[j].includes(normalize(v)))) {
+            colMap[field] = j
+            break
+          }
+        }
+      }
+      // Must have at least date and one of payment/receipt
+      if (colMap.date !== undefined && (colMap.payment !== undefined || colMap.receipt !== undefined)) {
+        console.log(`[BankParser] Found header row at ${i + 1}, columns:`, colMap)
+        return { headerRow: i, colMap }
+      }
+    }
+  }
+  return null
+}
+
+function makeBankId(): string {
+  return `bi_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+}
+
+export interface BankParseResult {
+  entries: BankEntry[]
+  startingBalance?: number
+}
+
+export function parseBankExcel(buffer: ArrayBuffer): BankParseResult {
+  const wb = XLSX.read(buffer, { type: 'array' })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+
+  const detected = detectBankHeaders(rows)
+  if (!detected) {
+    console.warn('[BankParser] Could not detect bank format headers')
+    return { entries: [] }
+  }
+
+  const { headerRow, colMap } = detected
+  const entries: BankEntry[] = []
+  const today = new Date()
+  today.setHours(23, 59, 59, 999)
+
+  // Track the oldest entry's balance to compute starting balance
+  let oldestBalance: number | null = null
+  let oldestPayment = 0
+  let oldestReceipt = 0
+
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const row = rows[i]
+    if (!row || row.length < 3) continue
+
+    const dateRaw = colMap.date !== undefined ? row[colMap.date] : undefined
+    const date = parseBankDate(dateRaw)
+    if (!date) continue
+
+    // Determine status: use explicit column if available, else compare date to today
+    let status: BankEntry['status']
+    if (colMap.status !== undefined) {
+      const statusRaw = normalize(row[colMap.status])
+      status = statusRaw.includes('בפועל') ? 'actual' : 'expected'
+    } else {
+      status = date <= today ? 'actual' : 'expected'
+    }
+
+    const category = colMap.category !== undefined ? normalize(row[colMap.category]) : ''
+    const vendor = colMap.vendor !== undefined ? normalize(row[colMap.vendor]) : ''
+    const payment = colMap.payment !== undefined ? parseAmount(row[colMap.payment]) : 0
+    const receipt = colMap.receipt !== undefined ? parseAmount(row[colMap.receipt]) : 0
+
+    if (payment === 0 && receipt === 0) continue
+    if (!vendor && !category) continue
+
+    // Track balance from the balance column (last valid row = oldest entry)
+    if (colMap.balance !== undefined) {
+      const rawBal = row[colMap.balance]
+      const bal = typeof rawBal === 'number' ? rawBal : parseFloat(String(rawBal).replace(/[₪,\s]/g, ''))
+      if (!isNaN(bal)) {
+        oldestBalance = bal
+        oldestPayment = payment
+        oldestReceipt = receipt
+      }
+    }
+
+    entries.push({
+      id: makeBankId(),
+      date,
+      status,
+      category,
+      vendor: vendor || category,
+      payment,
+      receipt,
+      recurring: false,
+      source: 'import',
+    })
+  }
+
+  // Compute starting balance: oldest entry's balance is AFTER that entry's transaction
+  // So balance before all transactions = oldestBalance + oldestPayment - oldestReceipt
+  let startingBalance: number | undefined
+  if (oldestBalance !== null) {
+    startingBalance = oldestBalance + oldestPayment - oldestReceipt
+  }
+
+  console.log(`[BankParser] Extracted ${entries.length} bank entries, startingBalance: ${startingBalance}`)
+  return { entries, startingBalance }
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,37 @@ export interface Category {
   icon: string
   color: string
   sortOrder: number
+  parentId?: string  // if set, this is a sub-category of the parent
+}
+
+export interface CategoryTreeNode {
+  parent: Category
+  children: Category[]
+}
+
+/** Returns only top-level categories (no parentId). */
+export function getParentCategories(cats: Category[]): Category[] {
+  return cats.filter((c) => !c.parentId)
+}
+
+/** Returns sub-categories of the given parent. */
+export function getChildCategories(parentId: string, cats: Category[]): Category[] {
+  return cats.filter((c) => c.parentId === parentId)
+}
+
+/** Returns the parent category ID. If the category is already top-level, returns its own ID. */
+export function getEffectiveParentId(catId: string, cats: Category[]): string {
+  const cat = cats.find((c) => c.id === catId)
+  return cat?.parentId ?? catId
+}
+
+/** Builds a tree of parent → children for dropdowns/UI. */
+export function buildCategoryTree(cats: Category[]): CategoryTreeNode[] {
+  const parents = getParentCategories(cats).sort((a, b) => a.sortOrder - b.sortOrder)
+  return parents.map((parent) => ({
+    parent,
+    children: getChildCategories(parent.id, cats).sort((a, b) => a.sortOrder - b.sortOrder),
+  }))
 }
 
 export const DEFAULT_CATEGORIES: Category[] = [

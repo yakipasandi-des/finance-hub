@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { useFilters } from '../context/FilterContext'
+import { CategoryIcon } from '../icons'
 
 export function FilterBar() {
   const {
@@ -51,13 +52,14 @@ export function FilterBar() {
       : `${filters.months.length} חודשים`
 
   // Category button label
-  const catLabel =
+  const singleCat = filters.categories.length === 1
+    ? availableCategories.find((c) => c.id === filters.categories[0])
+    : null
+  const catLabelText =
     filters.categories.length === 0
       ? 'כל הקטגוריות'
       : filters.categories.length === 1
-      ? (availableCategories.find((c) => c.id === filters.categories[0])
-          ? `${availableCategories.find((c) => c.id === filters.categories[0])!.icon} ${availableCategories.find((c) => c.id === filters.categories[0])!.name}`
-          : '1 קטגוריה')
+      ? (singleCat?.name ?? '1 קטגוריה')
       : `${filters.categories.length} קטגוריות`
 
   // Amount slider
@@ -115,7 +117,8 @@ export function FilterBar() {
             style={{ ...s.dropBtn, ...(filters.categories.length > 0 ? s.dropBtnActive : {}) }}
             onClick={() => { setCatOpen((o) => !o); setMonthOpen(false) }}
           >
-            {catLabel} <ChevronDown size={12} strokeWidth={2} />
+            {singleCat && <CategoryIcon icon={singleCat.icon} size={13} />}
+            {catLabelText} <ChevronDown size={12} strokeWidth={2} />
           </button>
           {catOpen && (
             <div style={s.dropdown}>
@@ -131,7 +134,10 @@ export function FilterBar() {
                     onChange={() => toggleCategory(c.id)}
                     style={{ accentColor: c.color, flexShrink: 0 }}
                   />
-                  <span style={{ ...s.dropRowLabel, color: c.color }}>{c.icon} {c.name}</span>
+                  <span style={{ ...s.dropRowLabel, color: c.color, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <CategoryIcon icon={c.icon} size={14} />
+                    {c.name}
+                  </span>
                   <span style={s.dropRowCount}>{c.count}</span>
                 </label>
               ))}

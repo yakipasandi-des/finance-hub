@@ -3,6 +3,7 @@ import { FileUpload } from './components/FileUpload'
 import { Dashboard } from './components/Dashboard'
 import { parseFiles } from './utils/parseFile'
 import { useCategoryMap } from './hooks/useCategoryMap'
+import { useRecurringMerchants } from './hooks/useRecurringMerchants'
 import { CategoriesProvider } from './context/CategoriesContext'
 import type { Transaction } from './types'
 
@@ -13,11 +14,14 @@ function App() {
   const [status, setStatus] = useState<Status>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const { map, setMapping, applyAutoSuggest } = useCategoryMap()
+  const { recurringMerchants, toggleRecurring } = useRecurringMerchants()
 
-  const handleFilesSelect = async (files: File[]) => {
+  const handleFilesSelect = async (files: File[], merge = false) => {
     if (files.length === 0) return
-    setStatus('parsing')
-    setErrorMsg(null)
+    if (!merge) {
+      setStatus('parsing')
+      setErrorMsg(null)
+    }
 
     try {
       const result = await parseFiles(files)
@@ -40,30 +44,47 @@ function App() {
       console.groupEnd()
 
       if (result.length === 0) {
-        setErrorMsg('לא נמצאו עסקאות בקובץ. בדוק שהקובץ מכיל נתוני ישראכרט תקינים.')
-        setStatus('error')
+        if (!merge) {
+          setErrorMsg('לא נמצאו עסקאות בקובץ. בדוק שהקובץ מכיל נתוני ישראכרט תקינים.')
+          setStatus('error')
+        }
         return
       }
 
       applyAutoSuggest(result)
-      setTransactions(result)
-      setStatus('done')
+      if (merge) {
+        // Merge: deduplicate by date|merchant|amount
+        setTransactions((prev) => {
+          const existing = new Set(prev.map((t) => `${t.date.getTime()}|${t.merchant}|${t.amount}`))
+          const newTxs = result.filter((t) => !existing.has(`${t.date.getTime()}|${t.merchant}|${t.amount}`))
+          return [...prev, ...newTxs]
+        })
+      } else {
+        setTransactions(result)
+        setStatus('done')
+      }
     } catch (err) {
       console.error('Parse error:', err)
-      setErrorMsg('שגיאה בקריאת הקובץ. נסה לייצא מחדש.')
-      setStatus('error')
+      if (!merge) {
+        setErrorMsg('שגיאה בקריאת הקובץ. נסה לייצא מחדש.')
+        setStatus('error')
+      }
     }
   }
 
-  const handleReset = () => {
-    setTransactions([])
-    setStatus('idle')
-    setErrorMsg(null)
+  const handleAddFiles = async (files: File[]) => {
+    await handleFilesSelect(files, true)
   }
 
   const handleClearAll = () => {
     localStorage.removeItem('merchantCategoryMap')
     localStorage.removeItem('categories')
+    localStorage.removeItem('savings')
+    localStorage.removeItem('budgets')
+    localStorage.removeItem('manualEntries')
+    localStorage.removeItem('bankEntries')
+    localStorage.removeItem('bankSettings')
+    localStorage.removeItem('recurringMerchants')
     window.location.reload()
   }
 
@@ -74,8 +95,10 @@ function App() {
           transactions={transactions}
           map={map}
           setMapping={setMapping}
-          onReset={handleReset}
+          onAddFiles={handleAddFiles}
           onClearAll={handleClearAll}
+          recurringMerchants={recurringMerchants}
+          toggleRecurring={toggleRecurring}
         />
       </CategoriesProvider>
     )

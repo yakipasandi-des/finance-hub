@@ -4,6 +4,7 @@ import {
 } from 'react'
 import type { Transaction } from '../types'
 import { useCategories } from './CategoriesContext'
+import { getChildCategories } from '../categories'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,6 +114,18 @@ export function FilterProvider({ transactions, map, children }: FilterProviderPr
     return cats
   }, [transactions, map])
 
+  // Expand parent filter selections to include their children
+  const expandedCategoryFilter = useMemo(() => {
+    if (filters.categories.length === 0) return []
+    const expanded = new Set(filters.categories)
+    for (const catId of filters.categories) {
+      for (const child of getChildCategories(catId, categories)) {
+        expanded.add(child.id)
+      }
+    }
+    return [...expanded]
+  }, [filters.categories, categories])
+
   // Apply all filters
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
@@ -120,14 +133,14 @@ export function FilterProvider({ transactions, map, children }: FilterProviderPr
         const key = `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, '0')}`
         if (!filters.months.includes(key)) return false
       }
-      if (filters.categories.length > 0) {
+      if (expandedCategoryFilter.length > 0) {
         const catId = map[tx.merchant] ?? '_uncat'
-        if (!filters.categories.includes(catId)) return false
+        if (!expandedCategoryFilter.includes(catId)) return false
       }
       if (tx.amount < filters.amountMin || tx.amount > filters.amountMax) return false
       return true
     })
-  }, [transactions, map, filters])
+  }, [transactions, map, filters, expandedCategoryFilter])
 
   const activeFilterCount = useMemo(() => {
     let n = 0

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-import { Category, DEFAULT_CATEGORIES } from '../categories'
+import { Category, DEFAULT_CATEGORIES, getChildCategories } from '../categories'
 
 const LS_KEY = 'categories'
 
@@ -43,9 +43,9 @@ function makeId(name: string): string {
 
 interface CategoriesContextValue {
   categories: Category[]
-  addCategory: (name: string, icon: string, color: string) => void
-  updateCategory: (id: string, changes: Partial<Pick<Category, 'name' | 'icon' | 'color'>>) => void
-  deleteCategory: (id: string) => void
+  addCategory: (name: string, icon: string, color: string, parentId?: string) => void
+  updateCategory: (id: string, changes: Partial<Pick<Category, 'name' | 'icon' | 'color' | 'parentId'>>) => void
+  deleteCategory: (id: string, promoteChildren?: boolean) => void
   reorderCategories: (ordered: Category[]) => void
   /** Moves all merchants from `fromId` to `toId`, then removes `fromId`. Caller must update merchantMap. */
   mergeInto: (fromId: string, toId: string, updateMerchantMap: (fromId: string, toId: string) => void) => void
@@ -62,26 +62,47 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
     setCategories(next)
   }, [])
 
-  const addCategory = useCallback((name: string, icon: string, color: string) => {
+  const addCategory = useCallback((name: string, icon: string, color: string, parentId?: string) => {
     setCategories((prev) => {
-      const next: Category = { id: makeId(name), name, icon, color, sortOrder: prev.length }
+      const next: Category = { id: makeId(name), name, icon, color, sortOrder: prev.length, ...(parentId ? { parentId } : {}) }
       const updated = [...prev, next]
       persist(updated)
       return updated
     })
   }, [])
 
-  const updateCategory = useCallback((id: string, changes: Partial<Pick<Category, 'name' | 'icon' | 'color'>>) => {
+  const updateCategory = useCallback((id: string, changes: Partial<Pick<Category, 'name' | 'icon' | 'color' | 'parentId'>>) => {
     setCategories((prev) => {
-      const updated = prev.map((c) => c.id === id ? { ...c, ...changes } : c)
+      const updated = prev.map((c) => {
+        if (c.id !== id) return c
+        const next = { ...c, ...changes }
+        // If parentId is explicitly set to undefined/empty, remove it (promote to top-level)
+        if ('parentId' in changes && !changes.parentId) {
+          delete next.parentId
+        }
+        return next
+      })
       persist(updated)
       return updated
     })
   }, [])
 
-  const deleteCategory = useCallback((id: string) => {
+  const deleteCategory = useCallback((id: string, promoteChildren?: boolean) => {
     setCategories((prev) => {
-      const updated = prev.filter((c) => c.id !== id).map((c, i) => ({ ...c, sortOrder: i }))
+      const children = getChildCategories(id, prev)
+      let updated: Category[]
+      if (promoteChildren && children.length > 0) {
+        // Promote children to top-level
+        updated = prev
+          .filter((c) => c.id !== id)
+          .map((c) => c.parentId === id ? { ...c, parentId: undefined } : c)
+          // Clean up parentId field
+          .map((c) => { if (!c.parentId) { const { parentId: _, ...rest } = c; return rest as Category } return c })
+      } else {
+        // Delete parent and all its children
+        updated = prev.filter((c) => c.id !== id && c.parentId !== id)
+      }
+      updated = updated.map((c, i) => ({ ...c, sortOrder: i }))
       persist(updated)
       return updated
     })

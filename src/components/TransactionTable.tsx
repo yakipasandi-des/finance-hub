@@ -1,25 +1,38 @@
+import { useState } from 'react'
+import { RotateCcw } from 'lucide-react'
 import { CategoryChip } from './CategoryChip'
 import { useFilters } from '../context/FilterContext'
 
 interface TransactionTableProps {
   map: Record<string, string>
   setMapping: (merchant: string, categoryId: string | null) => void
+  recurringMerchants: Set<string>
+  toggleRecurring: (merchant: string) => void
 }
 
 function formatAmount(n: number): string {
   return '₪' + n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
 }
 
-export function TransactionTable({ map, setMapping }: TransactionTableProps) {
+export function TransactionTable({ map, setMapping, recurringMerchants, toggleRecurring }: TransactionTableProps) {
   const { filteredTransactions } = useFilters()
-  const sorted = [...filteredTransactions].sort((a, b) => b.date.getTime() - a.date.getTime())
+  const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
+  const sorted = [...filteredTransactions].sort((a, b) =>
+    dateSort === 'desc' ? b.date.getTime() - a.date.getTime() : a.date.getTime() - b.date.getTime()
+  )
 
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={styles.table}>
         <thead>
           <tr>
-            {['תאריך', 'בית עסק', 'קטגוריה', 'פירוט', 'סכום'].map((h) => (
+            <th
+              style={styles.thSortable}
+              onClick={() => setDateSort(dateSort === 'desc' ? 'asc' : 'desc')}
+            >
+              תאריך {dateSort === 'desc' ? '▼' : '▲'}
+            </th>
+            {['בית עסק', 'קטגוריה', 'פירוט', 'קבוע', 'סכום'].map((h) => (
               <th key={h} style={styles.th}>{h}</th>
             ))}
           </tr>
@@ -42,6 +55,27 @@ export function TransactionTable({ map, setMapping }: TransactionTableProps) {
               </td>
               <td style={styles.td}>
                 {tx.notes && <NoteBadge notes={tx.notes} />}
+              </td>
+              <td style={{ ...styles.td, textAlign: 'center' }}>
+                {(() => {
+                  const autoDetected = tx.notes === 'הוראת קבע' || (tx.notes?.includes('תשלום') ?? false)
+                  const inSet = recurringMerchants.has(tx.merchant)
+                  // For auto-detected: inSet means user excluded it. For manual: inSet means user included it.
+                  const active = autoDetected ? !inSet : inSet
+                  return (
+                    <RotateCcw
+                      size={15}
+                      strokeWidth={1.75}
+                      style={{
+                        color: active ? 'var(--accent)' : 'var(--text-muted)',
+                        opacity: active ? 1 : 0.35,
+                        cursor: 'pointer',
+                        transition: 'color 0.15s, opacity 0.15s',
+                      }}
+                      onClick={() => toggleRecurring(tx.merchant)}
+                    />
+                  )
+                })()}
               </td>
               <td style={{ ...styles.td, fontWeight: 600, textAlign: 'left', direction: 'ltr' }}>
                 {formatAmount(tx.amount)}
@@ -88,6 +122,17 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
     borderBottom: '1px solid var(--border)',
     whiteSpace: 'nowrap',
+  },
+  thSortable: {
+    textAlign: 'right',
+    padding: '8px 12px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: 'var(--text-muted)',
+    borderBottom: '1px solid var(--border)',
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    userSelect: 'none' as const,
   },
   td: {
     padding: '8px 12px',
