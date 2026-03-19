@@ -108,7 +108,7 @@ export function CreditCardBox({ payments, onAdd, onUpdate, onDelete }: CreditCar
                       </span>
                     )}
                   </td>
-                  <td style={{ ...s.td, fontWeight: 600, color: '#e11d48' }}>
+                  <td style={{ ...s.td, fontWeight: 600, color: 'var(--red)' }}>
                     {isEditing ? (
                       <input
                         type="number"
@@ -134,7 +134,7 @@ export function CreditCardBox({ payments, onAdd, onUpdate, onDelete }: CreditCar
                       </span>
                     ) : (
                       <button
-                        style={{ ...s.iconBtn, color: '#e11d48' }}
+                        style={{ ...s.iconBtn, color: 'var(--red)' }}
                         onClick={() => onDelete(p.id)}
                         title="מחק"
                       >
@@ -171,7 +171,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   addBtn: {
     marginRight: 'auto',
-    padding: '5px 14px',
+    padding: '6px 16px',
     background: 'var(--accent)',
     color: '#fff',
     border: 'none',
@@ -180,6 +180,7 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontWeight: 600,
     cursor: 'pointer',
+    transition: 'opacity 0.15s ease',
   },
   empty: {
     color: 'var(--text-muted)',

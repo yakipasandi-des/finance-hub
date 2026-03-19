@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type React from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, Legend, PieChart, Pie, Sector,
 } from 'recharts'
-import { BarChart2, Tag, List, Settings, FilePlus, Wallet, ChevronLeft, Upload } from 'lucide-react'
+import { BarChart2, Tag, List, Settings, FilePlus, Wallet, ChevronLeft, Upload, Moon, Sun, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import type { Transaction, BankEntry } from '../types'
 import { getCategoryById, getChildCategories, getParentCategories } from '../categories'
 import { CategoryIcon } from '../icons'
@@ -126,6 +126,25 @@ function DashboardContent({
   const addFilesRef = useRef<HTMLInputElement>(null)
   const bankFileRef = useRef<HTMLInputElement>(null)
 
+  // --- Dark mode ---
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem('finance-hub-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('finance-hub-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  // --- Sidebar collapsed state ---
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('finance-hub-sidebar') === 'collapsed'
+  })
+  useEffect(() => {
+    localStorage.setItem('finance-hub-sidebar', sidebarCollapsed ? 'collapsed' : 'expanded')
+  }, [sidebarCollapsed])
+
   const manualExpenses = manualEntries.filter((e) => e.type === 'expense')
   const manualIncome = manualEntries.filter((e) => e.type === 'income')
   const {
@@ -224,7 +243,7 @@ function DashboardContent({
       return { id: parent.id, name: parent.name, icon: parent.icon, amount, color: parent.color }
     }).filter((d) => d.amount > 0)
 
-    if (uncatAmount > 0) catChartData.push({ id: '_uncat', name: 'לא ממופה', icon: 'Package', amount: uncatAmount, color: '#c8c3d8' })
+    if (uncatAmount > 0) catChartData.push({ id: '_uncat', name: 'לא ממופה', icon: 'Package', amount: uncatAmount, color: '#c4c7ce' })
   }
 
   catChartData.sort((a, b) => b.amount - a.amount)
@@ -274,47 +293,86 @@ function DashboardContent({
       ? `${earliest.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })} – ${latest.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
       : '—'
 
+  const sidebarWidth = sidebarCollapsed ? 64 : 220
+
   return (
     <div style={s.page}>
-      {/* ── Header ── */}
-      <header style={s.header}>
-        <span style={s.logo}>Finance Hub</span>
-        <nav style={s.tabs}>
-          {([
-            ['insights',     <BarChart2 size={14} strokeWidth={1.75} />, 'תובנות'],
-            ['mapping',      <Tag size={14} strokeWidth={1.75} />, 'מיפוי קטגוריות'],
-            ['transactions', <List size={14} strokeWidth={1.75} />, 'כל העסקאות'],
-            ['cashflow',     <Wallet size={14} strokeWidth={1.75} />, 'תזרים מזומנים'],
-            ['settings',     <Settings size={14} strokeWidth={1.75} />, 'הגדרות'],
-          ] as [Tab, React.ReactNode, string][]).map(([id, icon, label]) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              style={{ ...s.tabBtn, ...(tab === id ? s.tabActive : {}) }}
-            >
-              {icon}{label}
-            </button>
-          ))}
-        </nav>
-        <input
-          ref={addFilesRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          multiple
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const files = e.target.files
-            if (files && files.length > 0) onAddFiles(Array.from(files))
-            e.target.value = ''
-          }}
-        />
-        <button style={s.newBtn} onClick={() => addFilesRef.current?.click()}>
-          <FilePlus size={14} strokeWidth={1.75} />הוסף קבצים
-        </button>
-      </header>
+      <div style={s.bodyWrap}>
+        {/* ── Sidebar ── */}
+        <nav style={{ ...s.sidebar, width: sidebarWidth }}>
+          {/* Logo */}
+          <div style={s.sidebarHeader}>
+            <span style={{ ...s.logo, ...(sidebarCollapsed ? { fontSize: 0, width: 0, overflow: 'hidden' } : {}) }}>Finance Hub</span>
+          </div>
 
-      {/* ── Summary bar (insights only) ── */}
-      {tab === 'insights' && <div style={s.summaryBar}>
+          {/* Nav items */}
+          <div style={s.sidebarNav}>
+            {([
+              ['insights',     <BarChart2 size={20} strokeWidth={1.75} />, 'תובנות'],
+              ['mapping',      <Tag size={20} strokeWidth={1.75} />, 'מיפוי קטגוריות'],
+              ['transactions', <List size={20} strokeWidth={1.75} />, 'כל העסקאות'],
+              ['cashflow',     <Wallet size={20} strokeWidth={1.75} />, 'תזרים מזומנים'],
+              ['settings',     <Settings size={20} strokeWidth={1.75} />, 'הגדרות'],
+            ] as [Tab, React.ReactNode, string][]).map(([id, icon, label]) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                style={{ ...s.navItem, ...(tab === id ? s.navItemActive : {}) }}
+                title={sidebarCollapsed ? label : undefined}
+              >
+                <span style={s.navIcon}>{icon}</span>
+                {!sidebarCollapsed && <span style={s.navLabel}>{label}</span>}
+              </button>
+            ))}
+          </div>
+
+          {/* Bottom actions */}
+          <div style={s.sidebarFooter}>
+            <input
+              ref={addFilesRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = e.target.files
+                if (files && files.length > 0) onAddFiles(Array.from(files))
+                e.target.value = ''
+              }}
+            />
+            <button
+              style={s.addFilesBtn}
+              onClick={() => addFilesRef.current?.click()}
+              title={sidebarCollapsed ? 'הוסף קבצים' : undefined}
+            >
+              <FilePlus size={18} strokeWidth={1.75} />
+              {!sidebarCollapsed && <span>הוסף קבצים</span>}
+            </button>
+            <button
+              style={s.sidebarActionBtn}
+              onClick={() => setDark((d) => !d)}
+              title={sidebarCollapsed ? (dark ? 'מצב בהיר' : 'מצב כהה') : (dark ? 'מצב בהיר' : 'מצב כהה')}
+            >
+              {dark ? <Sun size={18} strokeWidth={1.75} /> : <Moon size={18} strokeWidth={1.75} />}
+              {!sidebarCollapsed && <span>{dark ? 'מצב בהיר' : 'מצב כהה'}</span>}
+            </button>
+            <button
+              style={s.collapseBtn}
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              title={sidebarCollapsed ? 'הרחב תפריט' : 'כווץ תפריט'}
+            >
+              {sidebarCollapsed
+                ? <PanelRightOpen size={18} strokeWidth={1.75} />
+                : <PanelRightClose size={18} strokeWidth={1.75} />
+              }
+            </button>
+          </div>
+        </nav>
+
+        {/* ── Main content ── */}
+        <div style={{ ...s.mainArea, marginRight: sidebarWidth }}>
+          {/* ── Summary bar (insights only) ── */}
+          {tab === 'insights' && <div style={s.summaryBar}>
         <SCard
           label="טווח תאריכים"
           value={dateRange}
@@ -451,9 +509,9 @@ function DashboardContent({
                                   if (children.length > 0) setSelectedParent(entry.id)
                                 }}
                               >
-                                {catChartData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                                {catChartData.map((d, i) => <Cell key={i} fill={d.color} stroke="none" />)}
                               </Pie>
-                              <Tooltip formatter={(v: number) => [fmt(v), 'סכום']} contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }} />
+                              <Tooltip formatter={(v: number) => [fmt(v), 'סכום']} contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13, background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
                             </PieChart>
                           </ResponsiveContainer>
                           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
@@ -522,7 +580,7 @@ function DashboardContent({
                               const cat = getCategoryById(name, categories)
                               return [fmt(v), cat ? cat.name : name]
                             }}
-                            contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }}
+                            contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13, background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                           />
                           <Legend content={({ payload }) => (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', justifyContent: 'center', marginTop: 8, fontFamily: 'inherit', fontSize: 12, direction: 'rtl' }}>
@@ -538,7 +596,7 @@ function DashboardContent({
                             </div>
                           )} />
                           {activeParentCats.map((cat) => <Bar key={cat.id} dataKey={cat.id} stackId="s" fill={cat.color} maxBarSize={60} />)}
-                          {monthChartData.some((d) => d['_uncat']) && <Bar dataKey="_uncat" stackId="s" fill="#c8c3d8" maxBarSize={60} />}
+                          {monthChartData.some((d) => d['_uncat']) && <Bar dataKey="_uncat" stackId="s" fill="#c4c7ce" maxBarSize={60} />}
                         </BarChart>
                       </ResponsiveContainer>
                     )}
@@ -701,14 +759,14 @@ function DashboardContent({
                     יתרה נוכחית
                     <HelpTooltip text="יתרת פתיחה בתוספת כל התנועות בסטטוס ״בפועל״ — תקבולות פחות תשלומים" />
                   </span>
-                  <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: currentBalance >= 0 ? '#0d9488' : '#e11d48' }}>{fmt(currentBalance)}</span>
+                  <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: currentBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(currentBalance)}</span>
                 </div>
                 <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
                     יתרה צפויה (חודש קדימה)
                     <HelpTooltip text="היתרה הנוכחית בתוספת כל התנועות הצפויות ותנועות קבועות שמוקרנות חודש קדימה" />
                   </span>
-                  <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: projectedBalance >= 0 ? '#0d9488' : '#e11d48' }}>{fmt(projectedBalance)}</span>
+                  <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: projectedBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(projectedBalance)}</span>
                 </div>
                 <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
@@ -717,7 +775,7 @@ function DashboardContent({
                   </span>
                   <span style={{
                     display: 'block', fontSize: 32, fontWeight: 700,
-                    color: avgMonthlyNet >= 0 ? '#0d9488' : '#e11d48',
+                    color: avgMonthlyNet >= 0 ? 'var(--green)' : 'var(--red)',
                   }}>
                     {avgMonthlyNet >= 0 ? '+' : ''}{fmt(avgMonthlyNet)}
                   </span>
@@ -947,17 +1005,16 @@ function DashboardContent({
 
         {/* ─ SETTINGS ─ */}
         {tab === 'settings' && (
-          <div style={s.card}>
-            <h2 style={{ ...s.cardTitle, marginBottom: 24 }}>הגדרות</h2>
-            <SettingsTab
-              allTransactions={allTransactions}
-              map={map}
-              setMapping={setMapping}
-              onClearAll={onClearAll}
-            />
-          </div>
+          <SettingsTab
+            allTransactions={allTransactions}
+            map={map}
+            setMapping={setMapping}
+            onClearAll={onClearAll}
+          />
         )}
       </div>
+        </div>{/* end mainArea */}
+      </div>{/* end bodyWrap */}
     </div>
   )
 }
@@ -985,35 +1042,45 @@ function SCard({ label, value, small, color, tooltip, note }: {
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
+const SIDEBAR_TRANSITION = 'width 0.2s ease, margin-right 0.2s ease'
+
 const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', paddingBottom: 48 },
-  header: { display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 24px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)', direction: 'rtl', flexWrap: 'wrap' },
-  logo: { fontSize: '18px', fontWeight: 700, color: 'var(--accent)', marginLeft: 'auto' },
-  tabs: { display: 'flex', gap: '4px' },
-  tabBtn: { padding: '6px 14px', border: 'none', borderRadius: '8px', background: 'transparent', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'inherit', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' },
-  tabActive: { background: 'var(--bg-primary)', color: 'var(--text-primary)', fontWeight: 700 },
-  newBtn: { padding: '6px 14px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '8px', fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer', color: 'var(--text-secondary)', marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '6px' },
-  summaryBar: { display: 'flex', gap: '16px', padding: '16px 24px', flexWrap: 'wrap', direction: 'rtl' },
-  sCard: { flex: '1 1 140px', background: 'var(--bg-surface)', borderRadius: '12px', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
-  sLabel: { fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 },
+  page: { minHeight: '100vh', display: 'flex', flexDirection: 'column' },
+  logo: { fontSize: '18px', fontWeight: 700, color: 'var(--accent)', letterSpacing: '-0.02em', whiteSpace: 'nowrap', transition: 'font-size 0.2s ease, width 0.2s ease' },
+  bodyWrap: { display: 'flex', flex: 1, position: 'relative', direction: 'rtl' },
+  sidebar: { position: 'fixed', top: 0, right: 0, height: '100vh', background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', zIndex: 30, transition: SIDEBAR_TRANSITION, overflow: 'hidden' },
+  sidebarHeader: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 16px 12px', borderBottom: '1px solid var(--border)', minHeight: 56, direction: 'rtl' },
+  sidebarNav: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px 10px', flex: 1 },
+  sidebarFooter: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px 12px', borderTop: '1px solid var(--border)' },
+  addFilesBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '10px 12px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'var(--accent)', color: '#fff', fontSize: '13px', fontFamily: 'inherit', fontWeight: 600, cursor: 'pointer', transition: 'opacity 0.15s ease', whiteSpace: 'nowrap', direction: 'rtl', overflow: 'hidden', width: '100%' },
+  sidebarActionBtn: { display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'inherit', fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s ease', whiteSpace: 'nowrap', direction: 'rtl', overflow: 'hidden' },
+  navItem: { display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'inherit', fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s ease', whiteSpace: 'nowrap', direction: 'rtl', overflow: 'hidden' },
+  navItemActive: { background: 'var(--accent-fill)', color: 'var(--accent)', fontWeight: 600 },
+  navIcon: { display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: 20, height: 20 },
+  navLabel: { overflow: 'hidden', textOverflow: 'ellipsis' },
+  collapseBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 12px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-faint)', cursor: 'pointer', transition: 'all 0.15s ease', fontFamily: 'inherit' },
+  mainArea: { flex: 1, display: 'flex', flexDirection: 'column', transition: SIDEBAR_TRANSITION, paddingBottom: 48, minWidth: 0 },
+  summaryBar: { display: 'flex', gap: '16px', padding: '20px 28px', flexWrap: 'wrap', direction: 'rtl' },
+  sCard: { flex: '1 1 140px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)' },
+  sLabel: { fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.01em' },
   sValue: { fontWeight: 700 },
-  content: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px 24px 0' },
+  content: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px 28px 0' },
   filterRow: { display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', direction: 'rtl' },
-  filterGroup: { display: 'flex', gap: '4px', background: 'var(--bg-surface)', borderRadius: '10px', padding: '4px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
-  filterBtn: { padding: '6px 14px', border: '1px solid transparent', borderRadius: '7px', background: 'transparent', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'inherit', cursor: 'pointer' },
-  filterActive: { background: 'var(--bg-primary)', color: 'var(--text-primary)', fontWeight: 700, border: '1px solid var(--border)' },
+  filterGroup: { display: 'flex', gap: '2px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', padding: '3px', border: '1px solid var(--border)' },
+  filterBtn: { padding: '7px 16px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'inherit', cursor: 'pointer', transition: 'all 0.15s ease', fontWeight: 500 },
+  filterActive: { background: 'var(--bg-surface)', color: 'var(--text-primary)', fontWeight: 600, boxShadow: 'var(--shadow-sm)' },
   splitSummary: { fontSize: '13px', color: 'var(--text-secondary)', direction: 'rtl' },
   insightGrid: { display: 'grid', gap: '20px' },
-  dragHandle: { cursor: 'grab', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, userSelect: 'none' as const, flexShrink: 0 },
+  dragHandle: { cursor: 'grab', color: 'var(--text-faint)', fontSize: 16, lineHeight: 1, userSelect: 'none' as const, flexShrink: 0, opacity: 0.6, transition: 'opacity 0.15s' },
   cardRow: { display: 'flex', gap: '20px', flexWrap: 'wrap' },
-  card: { flex: '1 1 0', minWidth: 0, background: 'var(--bg-surface)', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
-  cardTitle: { margin: '0 0 20px', fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', direction: 'rtl', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
+  card: { flex: '1 1 0', minWidth: 0, background: 'var(--bg-surface)', borderRadius: 'var(--radius-lg)', padding: '24px 28px', boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)' },
+  cardTitle: { margin: '0 0 20px', fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', direction: 'rtl', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', letterSpacing: '-0.01em' },
   cardSub: { fontSize: '13px', fontWeight: 400, color: 'var(--text-muted)' },
-  addInlineBtn: { marginRight: 'auto', padding: '4px 12px', background: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 8, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', color: '#fff', fontWeight: 600 },
-  empty: { color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '24px 0', margin: 0 },
+  addInlineBtn: { marginRight: 'auto', padding: '6px 14px', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', color: '#fff', fontWeight: 600, transition: 'opacity 0.15s ease' },
+  empty: { color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '32px 0', margin: 0 },
   metricBox: { flex: '1 1 140px', textAlign: 'center' as const, padding: '16px 12px' },
-  metricLabel: { display: 'block', fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 6 },
-  metricValue: { display: 'block', fontSize: 24, fontWeight: 700 },
-  cfInput: { padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, background: 'var(--bg-primary)', color: 'var(--text-primary)', direction: 'rtl', outline: 'none' },
-  cfImportBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginRight: 'auto' },
+  metricLabel: { display: 'block', fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 },
+  metricValue: { display: 'block', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' },
+  cfInput: { padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontSize: 13, background: 'var(--bg-primary)', color: 'var(--text-primary)', direction: 'rtl', outline: 'none', transition: 'border-color 0.15s ease' },
+  cfImportBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginRight: 'auto', transition: 'opacity 0.15s ease' },
 }

@@ -40,22 +40,22 @@ export function BalanceChart({ data, minBalanceLabel, minBalanceValue }: Balance
         />
         <Tooltip
           formatter={(v: number, name: string) => [fmt(v), name === 'actual' ? 'בפועל' : 'תחזית']}
-          contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }}
+          contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13, background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         />
         <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="4 4" />
         <Area
           dataKey="actual"
-          stroke="#0d9488"
-          fill="#0d948825"
+          stroke="var(--green)"
+          fill="var(--green-fill)"
           strokeWidth={2}
           connectNulls={false}
-          dot={{ r: 3, fill: '#0d9488' }}
+          dot={{ r: 3, fill: 'var(--green)' }}
           name="actual"
         />
         <Area
           dataKey="proj"
-          stroke="#4338ca"
-          fill="#4338ca15"
+          stroke="var(--accent)"
+          fill="var(--accent-fill)"
           strokeWidth={2}
           strokeDasharray="6 3"
           connectNulls={false}
@@ -67,8 +67,8 @@ export function BalanceChart({ data, minBalanceLabel, minBalanceValue }: Balance
             x={minBalanceLabel}
             y={minBalanceValue}
             r={6}
-            fill="#e11d48"
-            stroke="#fff"
+            fill="var(--red)"
+            stroke="var(--bg-surface)"
             strokeWidth={2}
             ifOverflow="extendDomain"
           >
@@ -76,7 +76,7 @@ export function BalanceChart({ data, minBalanceLabel, minBalanceValue }: Balance
               value={`שפל: ${fmt(minBalanceValue)}`}
               position="bottom"
               offset={10}
-              fill="#e11d48"
+              fill="var(--red)"
               fontSize={11}
               fontFamily="inherit"
             />

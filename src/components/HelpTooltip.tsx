@@ -23,11 +23,12 @@ export function HelpTooltip({ text }: HelpTooltipProps) {
           height: '16px',
           borderRadius: '50%',
           background: 'var(--bg-primary)',
-          border: '1px solid #c0b8d8',
+          border: '1px solid var(--border)',
           color: 'var(--text-faint)',
           cursor: 'default',
           userSelect: 'none',
           flexShrink: 0,
+          transition: 'color 0.15s ease',
         }}
       >
         <Info size={14} strokeWidth={1.75} />
@@ -40,16 +41,16 @@ export function HelpTooltip({ text }: HelpTooltipProps) {
             bottom: 'calc(100% + 10px)',
             right: '50%',
             transform: 'translateX(50%)',
-            background: '#2d2640',
-            color: '#f0edf8',
+            background: 'var(--tooltip-bg)',
+            color: 'var(--tooltip-text)',
             fontSize: '12px',
             fontWeight: 400,
             lineHeight: 1.6,
-            borderRadius: '8px',
-            padding: '9px 13px',
+            borderRadius: 'var(--radius-sm)',
+            padding: '10px 14px',
             width: '220px',
             zIndex: 300,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+            boxShadow: 'var(--shadow-lg)',
             direction: 'rtl',
             textAlign: 'right',
             pointerEvents: 'none',
@@ -65,7 +66,7 @@ export function HelpTooltip({ text }: HelpTooltipProps) {
               transform: 'translateX(50%) rotate(45deg)',
               width: '8px',
               height: '8px',
-              background: '#2d2640',
+              background: 'var(--tooltip-bg)',
             }}
           />
         </span>

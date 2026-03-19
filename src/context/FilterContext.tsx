@@ -109,7 +109,7 @@ export function FilterProvider({ transactions, map, children }: FilterProviderPr
 
     const uncatCount = transactions.filter((tx) => !map[tx.merchant]).length
     if (uncatCount > 0) {
-      cats.push({ id: '_uncat', name: 'ללא קטגוריה', icon: 'Package', color: '#c8c3d8', count: uncatCount })
+      cats.push({ id: '_uncat', name: 'ללא קטגוריה', icon: 'Package', color: '#c4c7ce', count: uncatCount })
     }
     return cats
   }, [transactions, map])

@@ -276,14 +276,14 @@ export function CashFlowTimeline({
                       entry.receipt > 0 ? fmt(entry.receipt) : ''
                     )}
                   </td>
-                  <td style={{ ...s.td, fontWeight: 600, color: balance >= 0 ? '#0d9488' : '#e11d48', textAlign: 'left' }}>
+                  <td style={{ ...s.td, fontWeight: 600, color: balance >= 0 ? 'var(--green)' : 'var(--red)', textAlign: 'left' }}>
                     {fmt(balance)}
                   </td>
                   <td style={{ ...s.td, textAlign: 'center' }}>
                     {isEditing ? (
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-                        <button style={s.iconBtn} onClick={saveEdit} title="שמור"><Check size={14} color="#0d9488" /></button>
-                        <button style={s.iconBtn} onClick={cancelEdit} title="ביטול"><X size={14} color="#e11d48" /></button>
+                        <button style={s.iconBtn} onClick={saveEdit} title="שמור"><Check size={14} color="var(--green)" /></button>
+                        <button style={s.iconBtn} onClick={cancelEdit} title="ביטול"><X size={14} color="var(--red)" /></button>
                         <button style={s.iconBtn} onClick={() => { onDeleteEntry(entry.id); setEditingId(null) }} title="מחק"><Trash2 size={14} /></button>
                       </div>
                     ) : (
@@ -314,22 +314,26 @@ const s: Record<string, React.CSSProperties> = {
   th: {
     padding: '10px 12px',
     textAlign: 'right',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     color: 'var(--text-muted)',
     borderBottom: '2px solid var(--border)',
     whiteSpace: 'nowrap',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.03em',
   },
   thSortable: {
     padding: '10px 12px',
     textAlign: 'right',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     color: 'var(--text-muted)',
     borderBottom: '2px solid var(--border)',
     whiteSpace: 'nowrap',
     cursor: 'pointer',
     userSelect: 'none' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.03em',
   },
   row: {
     transition: 'background 0.1s',
@@ -339,7 +343,7 @@ const s: Record<string, React.CSSProperties> = {
     borderRight: '3px dashed var(--accent)',
   },
   editingRow: {
-    background: '#ede9f820',
+    background: 'var(--accent-fill)',
   },
   td: {
     padding: '8px 12px',
@@ -356,30 +360,30 @@ const s: Record<string, React.CSSProperties> = {
     borderBottom: '1px solid var(--border)',
   },
   statusBadge: {
-    padding: '2px 8px',
-    borderRadius: 6,
+    padding: '3px 10px',
+    borderRadius: 20,
     fontSize: 11,
     fontWeight: 600,
   },
   statusActual: {
-    background: '#0d948815',
-    color: '#0d9488',
+    background: 'var(--green-fill)',
+    color: 'var(--green)',
   },
   statusExpected: {
-    background: '#b4530915',
-    color: '#b45309',
+    background: 'var(--yellow-fill)',
+    color: 'var(--yellow)',
   },
   category: {
     fontSize: 12,
     color: 'var(--text-secondary)',
   },
   amountPayment: {
-    color: '#e11d48',
+    color: 'var(--red)',
     textAlign: 'left' as const,
     fontWeight: 500,
   },
   amountReceipt: {
-    color: '#0d9488',
+    color: 'var(--green)',
     textAlign: 'left' as const,
     fontWeight: 500,
   },

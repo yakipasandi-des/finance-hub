@@ -170,7 +170,7 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
 
   const hasSummary = monthlySummary.income > 0
   const spentPct = monthlySummary.income > 0 ? (monthlySummary.expenses / monthlySummary.income) * 100 : 0
-  const summaryBarColor = spentPct > 100 ? '#e11d48' : spentPct >= 75 ? '#b45309' : '#0d9488'
+  const summaryBarColor = spentPct > 100 ? 'var(--red)' : spentPct >= 75 ? 'var(--yellow)' : 'var(--green)'
 
   // Empty state — show summary header if income exists, otherwise full empty
   if (budgetedCatIds.length === 0 && !adding && !hasSummary) {
@@ -210,15 +210,15 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
           <div style={s.summaryRow}>
             <div style={s.summaryItem}>
               <span style={s.summaryLabel}>הכנסות</span>
-              <span style={{ ...s.summaryValue, color: '#0d9488' }}>{fmt(Math.round(monthlySummary.income))}</span>
+              <span style={{ ...s.summaryValue, color: 'var(--green)' }}>{fmt(Math.round(monthlySummary.income))}</span>
             </div>
             <div style={s.summaryItem}>
               <span style={s.summaryLabel}>הוצאות</span>
-              <span style={{ ...s.summaryValue, color: '#e11d48' }}>{fmt(Math.round(monthlySummary.expenses))}</span>
+              <span style={{ ...s.summaryValue, color: 'var(--red)' }}>{fmt(Math.round(monthlySummary.expenses))}</span>
             </div>
             <div style={s.summaryItem}>
               <span style={s.summaryLabel}>נשאר</span>
-              <span style={{ ...s.summaryRemaining, color: monthlySummary.remaining >= 0 ? '#0d9488' : '#e11d48' }}>
+              <span style={{ ...s.summaryRemaining, color: monthlySummary.remaining >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 {fmt(Math.round(Math.abs(monthlySummary.remaining)))}{monthlySummary.remaining < 0 ? '−' : ''}
               </span>
             </div>
@@ -239,7 +239,7 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
         const actual = actuals[catId] ?? 0
         const budget = budgets[catId]
         const pct = budget > 0 ? (actual / budget) * 100 : 0
-        const barColor = pct >= 100 ? '#e11d48' : pct >= 80 ? '#b45309' : '#0d9488'
+        const barColor = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--yellow)' : 'var(--green)'
 
         return (
           <div key={catId} style={s.row}>
@@ -295,7 +295,7 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
             <span>{fmt(Math.round(totalActual))}</span>
             <span style={s.separator}>/</span>
             <span>{fmt(totalBudget)}</span>
-            <span style={{ ...s.totalPct, color: totalBudget > 0 && totalActual / totalBudget >= 1 ? '#e11d48' : '#0d9488' }}>
+            <span style={{ ...s.totalPct, color: totalBudget > 0 && totalActual / totalBudget >= 1 ? 'var(--red)' : 'var(--green)' }}>
               ({totalBudget > 0 ? Math.round((totalActual / totalBudget) * 100) : 0}%)
             </span>
           </div>
@@ -358,8 +358,8 @@ const s: Record<string, React.CSSProperties> = {
   catName: { flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' },
   pct: { fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', minWidth: 36, textAlign: 'left' },
   removeBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-faint)', lineHeight: 1, borderRadius: 4 },
-  barBg: { height: 8, borderRadius: 4, background: 'var(--bg-primary)', overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: 4, transition: 'width 0.3s ease' },
+  barBg: { height: 6, borderRadius: 3, background: 'var(--bg-primary)', overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: 3, transition: 'width 0.4s ease' },
   amounts: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)' },
   separator: { color: 'var(--text-faint)' },
   budgetAmount: { cursor: 'pointer', borderBottom: '1px dashed var(--border)', paddingBottom: 1 },
@@ -371,8 +371,8 @@ const s: Record<string, React.CSSProperties> = {
   addRow: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
   select: { flex: '1 1 120px', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, background: 'var(--bg-primary)', direction: 'rtl' },
   amountInput: { width: 80, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, background: 'var(--bg-primary)', direction: 'rtl' },
-  confirmBtn: { padding: '6px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  cancelBtn: { padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, cursor: 'pointer', color: 'var(--text-secondary)' },
+  confirmBtn: { padding: '7px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'opacity 0.15s ease' },
+  cancelBtn: { padding: '7px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, fontFamily: 'inherit', fontSize: 13, cursor: 'pointer', color: 'var(--text-secondary)', transition: 'all 0.15s ease' },
   addBtn: { alignSelf: 'center', padding: '6px 16px', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 8, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', color: 'var(--accent)', fontWeight: 500 },
   summarySection: { display: 'flex', flexDirection: 'column', gap: 6 },
   summaryRow: { display: 'flex', justifyContent: 'space-between', gap: 8 },
@@ -380,8 +380,8 @@ const s: Record<string, React.CSSProperties> = {
   summaryLabel: { fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 },
   summaryValue: { fontSize: 16, fontWeight: 600 },
   summaryRemaining: { fontSize: 22, fontWeight: 700 },
-  summaryBarBg: { height: 10, borderRadius: 5, background: 'var(--bg-primary)', overflow: 'hidden' },
-  summaryBarFill: { height: '100%', borderRadius: 5, transition: 'width 0.3s ease' },
+  summaryBarBg: { height: 8, borderRadius: 4, background: 'var(--bg-primary)', overflow: 'hidden' },
+  summaryBarFill: { height: '100%', borderRadius: 4, transition: 'width 0.4s ease' },
   summaryPctRow: { display: 'flex', justifyContent: 'flex-end' },
   summarySeparator: { borderTop: '1px solid var(--border)', marginTop: 4 },
 }

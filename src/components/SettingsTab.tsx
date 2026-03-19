@@ -155,8 +155,6 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
 
   return (
     <div style={s.page}>
-      <h1 style={s.pageTitle}>הגדרות</h1>
-
       {/* ── Category Management ── */}
       <section style={s.section}>
         <div style={s.sectionHeader}>
@@ -647,21 +645,21 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 // Styles
 // ---------------------------------------------------------------------------
 const s: Record<string, React.CSSProperties> = {
-  page: { display: 'flex', flexDirection: 'column', gap: '24px' },
-  pageTitle: { margin: 0, fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', direction: 'rtl' },
-  section: { background: 'var(--bg-surface)', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
+  page: { display: 'flex', flexDirection: 'column', gap: '20px' },
+  section: { background: 'var(--bg-surface)', borderRadius: 'var(--radius-lg)', padding: '24px 28px', boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', direction: 'rtl' },
-  sectionTitle: { margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' },
-  addBtn: { padding: '7px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
+  sectionTitle: { margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' },
+  addBtn: { padding: '8px 18px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'opacity 0.15s ease' },
   list: { display: 'flex', flexDirection: 'column', gap: '4px' },
   row: {
     display: 'flex', alignItems: 'center', gap: '12px',
-    padding: '10px 12px', borderRadius: '10px',
-    background: 'var(--bg-primary)', direction: 'rtl',
+    padding: '10px 12px', borderRadius: 'var(--radius-sm)',
+    direction: 'rtl',
     transition: 'background 0.1s',
     cursor: 'grab',
+    borderBottom: '1px solid var(--border)',
   },
-  rowDragOver: { background: '#ede9f8', outline: '2px dashed var(--accent)' },
+  rowDragOver: { background: 'var(--accent-fill)', outline: '2px dashed var(--accent)' },
   dragHandle: { fontSize: '16px', color: 'var(--text-faint)', cursor: 'grab', flexShrink: 0 },
   collapseBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-faint)', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center' },
   catIcon: { fontSize: '20px', flexShrink: 0 },
@@ -669,15 +667,15 @@ const s: Record<string, React.CSSProperties> = {
   catName: { fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' },
   catMeta: { fontSize: '11px', color: 'var(--text-faint)' },
   rowActions: { display: 'flex', gap: '4px', flexShrink: 0 },
-  iconBtn: { background: 'none', border: 'none', fontSize: '15px', cursor: 'pointer', padding: '4px', borderRadius: '6px', lineHeight: 1 },
+  iconBtn: { background: 'none', border: 'none', fontSize: '15px', cursor: 'pointer', padding: '4px', borderRadius: '6px', lineHeight: 1, color: 'var(--text-muted)' },
   iconBtnDisabled: { opacity: 0.3, cursor: 'not-allowed' },
   dangerList: { display: 'flex', flexDirection: 'column', gap: '12px' },
   dangerRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)', direction: 'rtl', gap: '16px' },
   dangerBtn: { padding: '6px 16px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--bg-primary)', color: 'var(--text-secondary)', fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
-  dangerBtnRed: { borderColor: '#d9708040', color: 'var(--red)', background: '#fce8ef' },
+  dangerBtnRed: { borderColor: 'var(--red)', color: 'var(--red)', background: 'rgba(239, 68, 68, 0.06)' },
   // Modal
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 },
-  modal: { background: 'var(--bg-surface)', borderRadius: '16px', padding: '28px', width: '360px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '12px', direction: 'rtl', maxHeight: '90vh', overflowY: 'auto' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 },
+  modal: { background: 'var(--bg-surface)', borderRadius: 'var(--radius-lg)', padding: '28px', width: '360px', maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '14px', direction: 'rtl', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' },
   modalTitle: { margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' },
   fieldLabel: { fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' },
   input: { padding: '9px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontFamily: 'inherit', fontSize: '14px', direction: 'rtl', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none', width: '100%', boxSizing: 'border-box' },
@@ -685,10 +683,10 @@ const s: Record<string, React.CSSProperties> = {
   emojiPreview: { fontSize: '32px', textAlign: 'center', padding: '8px', background: 'var(--bg-primary)', borderRadius: '8px' },
   emojiGrid: { display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '4px' },
   emojiBtn: { fontSize: '18px', padding: '4px', border: '1px solid transparent', borderRadius: '6px', background: 'none', cursor: 'pointer', textAlign: 'center' },
-  emojiBtnActive: { border: '1px solid var(--accent)', background: '#ede9f8' },
+  emojiBtnActive: { border: '1px solid var(--accent)', background: 'var(--accent-fill)' },
   colorGrid: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
   colorSwatch: { width: '28px', height: '28px', borderRadius: '50%', border: '2px solid transparent', cursor: 'pointer', flexShrink: 0 },
-  colorSwatchActive: { border: '3px solid #2d2640', outline: '2px solid white', outlineOffset: '-4px' },
+  colorSwatchActive: { border: '3px solid var(--text-primary)', outline: '2px solid var(--bg-surface)', outlineOffset: '-4px' },
   mergeRow: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: 'var(--bg-primary)', borderRadius: '8px', flexWrap: 'wrap' },
   mergeLabel: { fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' },
   mergeSelect: { flex: 1, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: '6px', fontFamily: 'inherit', fontSize: '12px', background: 'var(--bg-surface)', direction: 'rtl' },
@@ -703,7 +701,7 @@ const s: Record<string, React.CSSProperties> = {
   reassignSelect: { padding: '3px 8px', border: '1px solid var(--border)', borderRadius: '6px', fontFamily: 'inherit', fontSize: '13px', background: 'var(--bg-surface)', direction: 'rtl' },
   backupDesc: { margin: '0 0 16px', fontSize: '13px', color: 'var(--text-muted)' },
   backupRow: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
-  backupItem: { flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px', background: 'var(--bg-primary)', borderRadius: '12px' },
+  backupItem: { flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)' },
   backupLabel: { fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' },
   backupMeta: { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' },
   backupBtn: { display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start', padding: '7px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },

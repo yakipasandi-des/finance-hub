@@ -141,7 +141,7 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
               const cat = categories.find((c) => c.id === name)
               return [fmt(v), cat ? cat.name : name]
             }}
-            contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }}
+            contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13, background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           />
           {rankedCats.map((cat) => {
             if (effectiveHidden.has(cat.id)) return null
@@ -229,9 +229,9 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
 
 const styles: Record<string, React.CSSProperties> = {
   empty: { color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: '24px 0', margin: 0 },
-  toggleRow: { display: 'flex', gap: 4, marginBottom: 16, background: 'var(--bg-primary)', borderRadius: 10, padding: 4, width: 'fit-content', direction: 'rtl' },
-  toggleBtn: { padding: '6px 14px', border: '1px solid transparent', borderRadius: 7, background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' },
-  toggleActive: { background: 'var(--bg-surface)', color: 'var(--text-primary)', fontWeight: 700, border: '1px solid var(--border)' },
+  toggleRow: { display: 'flex', gap: 2, marginBottom: 16, background: 'var(--bg-primary)', borderRadius: 10, padding: 3, width: 'fit-content', direction: 'rtl', border: '1px solid var(--border)' },
+  toggleBtn: { padding: '7px 16px', border: 'none', borderRadius: 8, background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', transition: 'all 0.15s ease', fontWeight: 500 },
+  toggleActive: { background: 'var(--bg-surface)', color: 'var(--text-primary)', fontWeight: 600, boxShadow: 'var(--shadow-sm)' },
   legend: { display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 12, direction: 'rtl' },
   legendItem: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'inherit', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 4 },
   moversSection: { marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', direction: 'rtl' },
