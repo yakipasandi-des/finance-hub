@@ -1,10 +1,11 @@
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer, ReferenceLine, ReferenceDot, Label,
 } from 'recharts'
 
 export interface BalancePoint {
   label: string
+  date: string  // ISO date for sorting/matching
   // Split series: one for actual, one for projected
   actual: number | null
   proj: number | null
@@ -12,29 +13,33 @@ export interface BalancePoint {
 
 interface BalanceChartProps {
   data: BalancePoint[]
+  minBalanceLabel?: string
+  minBalanceValue?: number
+  minBalanceSeries?: 'actual' | 'proj'
 }
 
 function fmt(n: number) {
   return '₪' + n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
 }
 
-export function BalanceChart({ data }: BalanceChartProps) {
+export function BalanceChart({ data, minBalanceLabel, minBalanceValue }: BalanceChartProps) {
   if (data.length === 0) return <p style={s.empty}>אין נתונים להצגה.</p>
 
   return (
-    <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={data} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={280}>
+      <AreaChart data={data} margin={{ left: 16, right: 8, top: 16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
         <XAxis
           dataKey="label"
           tick={{ fontSize: 12, fill: 'var(--text-secondary)', fontFamily: 'inherit' }}
         />
         <YAxis
+          width={60}
           tickFormatter={(v: number) => '₪' + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(0) + 'K' : v)}
           tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
         />
         <Tooltip
-          formatter={(v: number) => [fmt(v), 'יתרה']}
+          formatter={(v: number, name: string) => [fmt(v), name === 'actual' ? 'בפועל' : 'תחזית']}
           contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }}
         />
         <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="4 4" />
@@ -45,7 +50,7 @@ export function BalanceChart({ data }: BalanceChartProps) {
           strokeWidth={2}
           connectNulls={false}
           dot={{ r: 3, fill: '#0d9488' }}
-          name="בפועל"
+          name="actual"
         />
         <Area
           dataKey="proj"
@@ -55,8 +60,28 @@ export function BalanceChart({ data }: BalanceChartProps) {
           strokeDasharray="6 3"
           connectNulls={false}
           dot={{ r: 3, fill: '#4338ca' }}
-          name="תחזית"
+          name="proj"
         />
+        {minBalanceLabel !== undefined && minBalanceValue !== undefined && (
+          <ReferenceDot
+            x={minBalanceLabel}
+            y={minBalanceValue}
+            r={6}
+            fill="#e11d48"
+            stroke="#fff"
+            strokeWidth={2}
+            ifOverflow="extendDomain"
+          >
+            <Label
+              value={`שפל: ${fmt(minBalanceValue)}`}
+              position="bottom"
+              offset={10}
+              fill="#e11d48"
+              fontSize={11}
+              fontFamily="inherit"
+            />
+          </ReferenceDot>
+        )}
       </AreaChart>
     </ResponsiveContainer>
   )

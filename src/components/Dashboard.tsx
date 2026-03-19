@@ -15,6 +15,8 @@ import { useBudgets } from '../hooks/useBudgets'
 import { useManualEntries } from '../hooks/useManualEntries'
 import { useBankEntries } from '../hooks/useBankEntries'
 import { useCreditCardPayments } from '../hooks/useCreditCardPayments'
+import { useCardLayout } from '../hooks/useCardLayout'
+import type { CardLayout } from '../hooks/useCardLayout'
 import { parseBankExcel } from '../utils/parseFile'
 import { FilterBar } from './FilterBar'
 import { MerchantMapper } from './MerchantMapper'
@@ -25,9 +27,27 @@ import { SavingsCard } from './SavingsCard'
 import { BudgetCard } from './BudgetCard'
 import { CashFlowTimeline } from './CashFlowTimeline'
 import { CreditCardBox } from './CreditCardBox'
+import { BalanceChart } from './BalanceChart'
+import type { BalancePoint } from './BalanceChart'
+import { SpendingTrendsCard } from './SpendingTrendsCard'
+import { ResizeHandle } from './ResizeHandle'
 
 type Tab = 'insights' | 'mapping' | 'transactions' | 'cashflow' | 'settings'
 type SpendFilter = 'all' | 'variable' | 'recurring'
+
+const DEFAULT_INSIGHTS_LAYOUT: CardLayout[] = [
+  { id: 'categories', colSpan: 2 },
+  { id: 'monthly', colSpan: 2 },
+  { id: 'trends', colSpan: 2 },
+  { id: 'savings', colSpan: 2 },
+  { id: 'budget', colSpan: 4 },
+]
+
+const DEFAULT_CASHFLOW_LAYOUT: CardLayout[] = [
+  { id: 'cf-creditcard', colSpan: 1 },
+  { id: 'cf-balancechart', colSpan: 3 },
+  { id: 'cf-timeline', colSpan: 4 },
+]
 
 const HEBREW_MONTHS = [
   'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
@@ -85,7 +105,7 @@ function DashboardContent({
   toggleRecurring: (merchant: string) => void
 }) {
   const { categories } = useCategories()
-  const { accounts, addAccount, updateAccount, deleteAccount } = useSavings()
+  const { accounts, addAccount, updateAccount, deleteAccount, savingsGoal, setSavingsGoal } = useSavings()
   const { budgets, setBudget, removeBudget } = useBudgets()
   const { entries: manualEntries } = useManualEntries()
   const {
@@ -119,6 +139,19 @@ function DashboardContent({
   const [budgetAdding, setBudgetAdding] = useState(false)
   const [selectedParent, setSelectedParent] = useState<string | null>(null)
   const [hoveredCatIdx, setHoveredCatIdx] = useState<number | null>(null)
+
+  // --- Balance chart date range filter ---
+  const [chartDateFrom, setChartDateFrom] = useState('')
+  const [chartDateTo, setChartDateTo] = useState('')
+
+  // --- Layout hooks for insights and cash flow ---
+  const insights = useCardLayout('finance-hub-insights-layout', DEFAULT_INSIGHTS_LAYOUT)
+  const cashflow = useCardLayout('finance-hub-cashflow-layout', DEFAULT_CASHFLOW_LAYOUT)
+  const insightsGridRef = useRef<HTMLDivElement>(null)
+  const cashflowGridRef = useRef<HTMLDivElement>(null)
+
+  // Track which card is hovered (for resize handle visibility)
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null)
 
   // --- Summary stats (from filteredTransactions) ---
   const total = filteredTransactions.reduce((s, t) => s + t.amount, 0)
@@ -330,167 +363,231 @@ function DashboardContent({
               )}
             </div>
 
-            {/* Row 1: Chart 1 + Chart 2 side by side */}
-            <div style={s.cardRow}>
-              <div style={s.card}>
-                <h2 style={s.cardTitle}>
-                  {selectedParent ? (() => {
-                    const p = categories.find((c) => c.id === selectedParent)
-                    return p ? `${p.name} — פירוט` : 'פירוט'
-                  })() : 'הוצאות לפי קטגוריה'}
-                  <HelpTooltip text="סך ההוצאות בכל קטגוריה, מגבוה לנמוך. 'לא ממופה' הוא בתי עסק שטרם שויכו לקטגוריה — עבור למיפוי כדי להשלים" />
-                  <span style={s.cardSub}>{fmt(catChartData.reduce((s, d) => s + d.amount, 0))}</span>
-                  {selectedParent && (
-                    <button
-                      style={{ ...s.addInlineBtn, background: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-                      onClick={() => setSelectedParent(null)}
-                    >
-                      חזור
-                    </button>
-                  )}
-                </h2>
-                {catChartData.length === 0 ? (
-                  <p style={s.empty}>אין נתונים. מפה בתי עסק לקטגוריות בלשונית מיפוי.</p>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 32, direction: 'rtl', flexWrap: 'wrap' }}>
-                    <div style={{ position: 'relative', flex: '0 0 220px', height: 220 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={catChartData}
-                            dataKey="amount"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={62}
-                            outerRadius={98}
-                            paddingAngle={2}
-                            startAngle={90}
-                            endAngle={-270}
-                            style={{ cursor: !selectedParent ? 'pointer' : 'default' }}
-                            activeIndex={hoveredCatIdx ?? undefined}
-                            activeShape={(props: unknown) => {
-                              const p = props as Record<string, unknown>
-                              return <Sector {...p} outerRadius={(p.outerRadius as number) + 6} />
-                            }}
-                            onMouseEnter={(_data, idx) => setHoveredCatIdx(idx)}
-                            onMouseLeave={() => setHoveredCatIdx(null)}
-                            onClick={(_data, idx) => {
-                              if (selectedParent) return
-                              const entry = catChartData[idx]
-                              if (!entry || entry.id === '_uncat') return
-                              const children = getChildCategories(entry.id, categories)
-                              if (children.length > 0) setSelectedParent(entry.id)
-                            }}
-                          >
-                            {catChartData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                          </Pie>
-                          <Tooltip formatter={(v: number) => [fmt(v), 'סכום']} contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>סה״כ</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{fmt(catChartData.reduce((s, d) => s + d.amount, 0))}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 140 }}>
-                      {catChartData.map((d, i) => {
-                        const hasDrillDown = !selectedParent && d.id !== '_uncat' && getChildCategories(d.id, categories).length > 0
-                        return (
-                          <div
-                            key={i}
-                            onMouseEnter={() => setHoveredCatIdx(i)}
-                            onMouseLeave={() => setHoveredCatIdx(null)}
-                            onClick={() => {
-                              if (hasDrillDown) setSelectedParent(d.id)
-                            }}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-                              padding: '4px 6px', borderRadius: 6, transition: 'background 0.15s',
-                              background: hoveredCatIdx === i ? d.color + '15' : 'transparent',
-                              cursor: hasDrillDown ? 'pointer' : 'default',
-                            }}
-                          >
-                            <div style={{ width: 11, height: 11, borderRadius: 3, background: d.color, flexShrink: 0 }} />
-                            <span style={{ color: d.color, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                              <CategoryIcon icon={d.icon} size={13} />
-                            </span>
-                            <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{d.name}</span>
-                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{fmt(d.amount)}</span>
-                            <span style={{ color: 'var(--text-muted)', fontSize: 11, minWidth: 32, textAlign: 'left' }}>
-                              {insightsTotal > 0 ? Math.round(d.amount / insightsTotal * 100) : 0}%
-                            </span>
-                            {hasDrillDown && (
-                              <ChevronLeft size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+            {/* Draggable insight cards in 4-column grid */}
+            <div ref={insightsGridRef} style={{ ...s.insightGrid, gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              {insights.layout.map(({ id: cardId }) => {
+                const colSpan = (insights.layout.find((c) => c.id === cardId)?.colSpan ?? 1) as 1 | 2 | 3 | 4
+                const isDragging = insights.draggedCard === cardId
+                const isOver = insights.dropTarget === cardId && insights.draggedCard !== cardId
+                const wrapStyle: React.CSSProperties = {
+                  ...s.card,
+                  position: 'relative',
+                  gridColumn: `span ${colSpan}`,
+                  cursor: 'grab',
+                  opacity: isDragging ? 0.5 : 1,
+                  outline: isOver ? '2px dashed var(--accent)' : 'none',
+                  outlineOffset: -2,
+                  transition: 'opacity 0.15s, outline 0.15s',
+                }
+                const dragProps = {
+                  draggable: true,
+                  'data-card-wrapper': true,
+                  onDragStart: insights.handleDragStart(cardId),
+                  onDragEnd: insights.handleDragEnd,
+                  onDragOver: insights.handleDragOver(cardId),
+                  onDragLeave: insights.handleDragLeave,
+                  onDrop: insights.handleDrop(cardId),
+                  onMouseEnter: () => setHoveredCard(cardId),
+                  onMouseLeave: () => setHoveredCard(null),
+                }
+                const resizeHandles = (
+                  <>
+                    <ResizeHandle side="left" cardId={cardId} currentSpan={colSpan} gridRef={insightsGridRef} onResize={insights.updateSpan} visible={hoveredCard === cardId} />
+                    <ResizeHandle side="right" cardId={cardId} currentSpan={colSpan} gridRef={insightsGridRef} onResize={insights.updateSpan} visible={hoveredCard === cardId} />
+                  </>
+                )
 
-              <div style={s.card}>
-                <h2 style={s.cardTitle}>
-                  השוואה חודשית
-                  <HelpTooltip text="השוואת ההוצאות הכוללות בין החודשים, מחולקת לפי קטגוריות. שימושי לזיהוי חודשים חריגים או מגמות לאורך זמן" />
-                </h2>
-                {monthChartData.length === 0 ? (
-                  <p style={s.empty}>אין נתונים לאחר סינון.</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={monthChartData} margin={{ left: 20, right: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--text-secondary)', fontFamily: 'inherit' }} />
-                      <YAxis width={55} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : v)} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                      <Tooltip
-                        formatter={(v: number, name: string) => {
-                          if (name === '_uncat') return [fmt(v), 'לא ממופה']
-                          const cat = getCategoryById(name, categories)
-                          return [fmt(v), cat ? cat.name : name]
-                        }}
-                        contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }}
-                      />
-                      <Legend content={({ payload }) => (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', justifyContent: 'center', marginTop: 8, fontFamily: 'inherit', fontSize: 12, direction: 'rtl' }}>
-                          {(payload ?? []).map((entry, i) => {
-                            const label = entry.dataKey === '_uncat' ? 'לא ממופה' : (getCategoryById(String(entry.dataKey), categories)?.name ?? String(entry.dataKey))
+                if (cardId === 'categories') return (
+                  <div key={cardId} style={wrapStyle} {...dragProps}>
+                    {resizeHandles}
+                    <h2 style={s.cardTitle}>
+                      <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                      {selectedParent ? (() => {
+                        const p = categories.find((c) => c.id === selectedParent)
+                        return p ? `${p.name} — פירוט` : 'פירוט'
+                      })() : 'הוצאות לפי קטגוריה'}
+                      <HelpTooltip text="סך ההוצאות בכל קטגוריה, מגבוה לנמוך. 'לא ממופה' הוא בתי עסק שטרם שויכו לקטגוריה — עבור למיפוי כדי להשלים" />
+                      <span style={s.cardSub}>{fmt(catChartData.reduce((s, d) => s + d.amount, 0))}</span>
+                      {selectedParent && (
+                        <button
+                          style={{ ...s.addInlineBtn, background: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+                          onClick={() => setSelectedParent(null)}
+                        >
+                          חזור
+                        </button>
+                      )}
+                    </h2>
+                    {catChartData.length === 0 ? (
+                      <p style={s.empty}>אין נתונים. מפה בתי עסק לקטגוריות בלשונית מיפוי.</p>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 32, direction: 'rtl', flexWrap: 'wrap' }}>
+                        <div style={{ position: 'relative', flex: '0 0 220px', height: 220 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={catChartData}
+                                dataKey="amount"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={62}
+                                outerRadius={98}
+                                paddingAngle={2}
+                                startAngle={90}
+                                endAngle={-270}
+                                style={{ cursor: !selectedParent ? 'pointer' : 'default' }}
+                                activeIndex={hoveredCatIdx ?? undefined}
+                                activeShape={(props: unknown) => {
+                                  const p = props as Record<string, unknown>
+                                  return <Sector {...p} outerRadius={(p.outerRadius as number) + 6} />
+                                }}
+                                onMouseEnter={(_data, idx) => setHoveredCatIdx(idx)}
+                                onMouseLeave={() => setHoveredCatIdx(null)}
+                                onClick={(_data, idx) => {
+                                  if (selectedParent) return
+                                  const entry = catChartData[idx]
+                                  if (!entry || entry.id === '_uncat') return
+                                  const children = getChildCategories(entry.id, categories)
+                                  if (children.length > 0) setSelectedParent(entry.id)
+                                }}
+                              >
+                                {catChartData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                              </Pie>
+                              <Tooltip formatter={(v: number) => [fmt(v), 'סכום']} contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>סה״כ</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{fmt(catChartData.reduce((s, d) => s + d.amount, 0))}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 140 }}>
+                          {catChartData.map((d, i) => {
+                            const hasDrillDown = !selectedParent && d.id !== '_uncat' && getChildCategories(d.id, categories).length > 0
                             return (
-                              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
-                                <span style={{ width: 10, height: 10, borderRadius: 2, background: String(entry.color), flexShrink: 0 }} />
-                                {label}
-                              </span>
+                              <div
+                                key={i}
+                                onMouseEnter={() => setHoveredCatIdx(i)}
+                                onMouseLeave={() => setHoveredCatIdx(null)}
+                                onClick={() => {
+                                  if (hasDrillDown) setSelectedParent(d.id)
+                                }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
+                                  padding: '4px 6px', borderRadius: 6, transition: 'background 0.15s',
+                                  background: hoveredCatIdx === i ? d.color + '15' : 'transparent',
+                                  cursor: hasDrillDown ? 'pointer' : 'default',
+                                }}
+                              >
+                                <div style={{ width: 11, height: 11, borderRadius: 3, background: d.color, flexShrink: 0 }} />
+                                <span style={{ color: d.color, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                  <CategoryIcon icon={d.icon} size={13} />
+                                </span>
+                                <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{d.name}</span>
+                                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{fmt(d.amount)}</span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: 11, minWidth: 32, textAlign: 'left' }}>
+                                  {insightsTotal > 0 ? Math.round(d.amount / insightsTotal * 100) : 0}%
+                                </span>
+                                {hasDrillDown && (
+                                  <ChevronLeft size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                )}
+                              </div>
                             )
                           })}
                         </div>
-                      )} />
-                      {activeParentCats.map((cat) => <Bar key={cat.id} dataKey={cat.id} stackId="s" fill={cat.color} maxBarSize={60} />)}
-                      {monthChartData.some((d) => d['_uncat']) && <Bar dataKey="_uncat" stackId="s" fill="#c8c3d8" maxBarSize={60} />}
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </div>
+                      </div>
+                    )}
+                  </div>
+                )
 
-            {/* Row 2: savings + placeholder */}
-            <div style={s.cardRow}>
-              <div style={s.card}>
-                <h2 style={s.cardTitle}>
-                  חסכונות
-                  <HelpTooltip text="מעקב אחר חשבונות חיסכון, קופות גמל, קרנות השתלמות ועוד. הוסף חשבונות ועדכן יתרות כדי לראות את התמונה הכוללת" />
-                  <button style={s.addInlineBtn} onClick={addAccount}>+ הוסף חיסכון</button>
-                </h2>
-                <SavingsCard accounts={accounts} onUpdate={updateAccount} onDelete={deleteAccount} />
-              </div>
-              <div style={s.card}>
-                <h2 style={s.cardTitle}>
-                  תקציב חודשי
-                  <HelpTooltip text="הגדר תקציב חודשי לכל קטגוריה ועקוב אחר ההוצאות בפועל מול היעד. כולל הוצאות כרטיס אשראי והוצאות ידניות קבועות" />
-                  <button style={s.addInlineBtn} onClick={() => setBudgetAdding(true)}>+ הוסף תקציב</button>
-                </h2>
-                <BudgetCard budgets={budgets} setBudget={setBudget} removeBudget={removeBudget} map={map} manualExpenses={manualExpenses} manualIncome={manualIncome} bankEntries={bankEntries} adding={budgetAdding} setAdding={setBudgetAdding} />
-              </div>
+                if (cardId === 'monthly') return (
+                  <div key={cardId} style={wrapStyle} {...dragProps}>
+                    {resizeHandles}
+                    <h2 style={s.cardTitle}>
+                      <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                      השוואה חודשית
+                      <HelpTooltip text="השוואת ההוצאות הכוללות בין החודשים, מחולקת לפי קטגוריות. שימושי לזיהוי חודשים חריגים או מגמות לאורך זמן" />
+                    </h2>
+                    {monthChartData.length === 0 ? (
+                      <p style={s.empty}>אין נתונים לאחר סינון.</p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={monthChartData} margin={{ left: 20, right: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                          <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--text-secondary)', fontFamily: 'inherit' }} />
+                          <YAxis width={55} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : v)} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+                          <Tooltip
+                            formatter={(v: number, name: string) => {
+                              if (name === '_uncat') return [fmt(v), 'לא ממופה']
+                              const cat = getCategoryById(name, categories)
+                              return [fmt(v), cat ? cat.name : name]
+                            }}
+                            contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13 }}
+                          />
+                          <Legend content={({ payload }) => (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', justifyContent: 'center', marginTop: 8, fontFamily: 'inherit', fontSize: 12, direction: 'rtl' }}>
+                              {(payload ?? []).map((entry, i) => {
+                                const label = entry.dataKey === '_uncat' ? 'לא ממופה' : (getCategoryById(String(entry.dataKey), categories)?.name ?? String(entry.dataKey))
+                                return (
+                                  <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
+                                    <span style={{ width: 10, height: 10, borderRadius: 2, background: String(entry.color), flexShrink: 0 }} />
+                                    {label}
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          )} />
+                          {activeParentCats.map((cat) => <Bar key={cat.id} dataKey={cat.id} stackId="s" fill={cat.color} maxBarSize={60} />)}
+                          {monthChartData.some((d) => d['_uncat']) && <Bar dataKey="_uncat" stackId="s" fill="#c8c3d8" maxBarSize={60} />}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                )
+
+                if (cardId === 'trends') return (
+                  <div key={cardId} style={wrapStyle} {...dragProps}>
+                    {resizeHandles}
+                    <h2 style={s.cardTitle}>
+                      <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                      מגמות הוצאות
+                      <HelpTooltip text="מגמות הוצאות לפי קטגוריה לאורך זמן. ניתן להחליף בין ערכים חודשיים לממוצע נע (3 חודשים) וללחוץ על קטגוריה במקרא כדי להסתיר/להציג אותה" />
+                    </h2>
+                    <SpendingTrendsCard
+                      monthlyData={monthChartData as { month: string; [categoryId: string]: number | string }[]}
+                      categories={activeParentCats.map((c) => ({ id: c.id, name: c.name, icon: c.icon, color: c.color }))}
+                    />
+                  </div>
+                )
+
+                if (cardId === 'savings') return (
+                  <div key={cardId} style={wrapStyle} {...dragProps}>
+                    {resizeHandles}
+                    <h2 style={s.cardTitle}>
+                      <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                      חסכונות
+                      <HelpTooltip text="מעקב אחר חשבונות חיסכון, קופות גמל, קרנות השתלמות ועוד. הוסף חשבונות ועדכן יתרות כדי לראות את התמונה הכוללת" />
+                      <button style={s.addInlineBtn} onClick={addAccount}>+ הוסף חיסכון</button>
+                    </h2>
+                    <SavingsCard accounts={accounts} onUpdate={updateAccount} onDelete={deleteAccount} savingsGoal={savingsGoal} onSetGoal={setSavingsGoal} />
+                  </div>
+                )
+
+                if (cardId === 'budget') return (
+                  <div key={cardId} style={wrapStyle} {...dragProps}>
+                    {resizeHandles}
+                    <h2 style={s.cardTitle}>
+                      <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                      תקציב חודשי
+                      <HelpTooltip text="הגדר תקציב חודשי לכל קטגוריה ועקוב אחר ההוצאות בפועל מול היעד. כולל הוצאות כרטיס אשראי והוצאות ידניות קבועות" />
+                      <button style={s.addInlineBtn} onClick={() => setBudgetAdding(true)}>+ הוסף תקציב</button>
+                    </h2>
+                    <BudgetCard budgets={budgets} setBudget={setBudget} removeBudget={removeBudget} map={map} manualExpenses={manualExpenses} manualIncome={manualIncome} bankEntries={bankEntries} adding={budgetAdding} setAdding={setBudgetAdding} />
+                  </div>
+                )
+
+                return null
+              })}
             </div>
 
 
@@ -600,16 +697,23 @@ function DashboardContent({
               {/* Summary metrics */}
               <div style={s.cardRow}>
                 <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
-                  <span style={{ display: 'block', fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>יתרה נוכחית</span>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
+                    יתרה נוכחית
+                    <HelpTooltip text="יתרת פתיחה בתוספת כל התנועות בסטטוס ״בפועל״ — תקבולות פחות תשלומים" />
+                  </span>
                   <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: currentBalance >= 0 ? '#0d9488' : '#e11d48' }}>{fmt(currentBalance)}</span>
                 </div>
                 <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
-                  <span style={{ display: 'block', fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>יתרה צפויה (חודש קדימה)</span>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
+                    יתרה צפויה (חודש קדימה)
+                    <HelpTooltip text="היתרה הנוכחית בתוספת כל התנועות הצפויות ותנועות קבועות שמוקרנות חודש קדימה" />
+                  </span>
                   <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: projectedBalance >= 0 ? '#0d9488' : '#e11d48' }}>{fmt(projectedBalance)}</span>
                 </div>
                 <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
-                  <span style={{ display: 'block', fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
                     תזרים חודשי ממוצע
+                    <HelpTooltip text="ממוצע ההפרש בין תקבולות לתשלומים בכל חודש — מספר חיובי מראה שנכנס יותר ממה שיוצא" />
                   </span>
                   <span style={{
                     display: 'block', fontSize: 32, fontWeight: 700,
@@ -636,41 +740,205 @@ function DashboardContent({
                 </label>
               </div>
 
-              {/* Credit card payment box */}
-              <CreditCardBox
-                payments={ccPayments}
-                onAdd={addCcPayment}
-                onUpdate={updateCcPayment}
-                onDelete={deleteCcPayment}
-              />
+              {/* Cash flow managed cards in 4-column grid */}
+              <div ref={cashflowGridRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+                {cashflow.layout.map(({ id: cfCardId }) => {
+                  const cfColSpan = (cashflow.layout.find((c) => c.id === cfCardId)?.colSpan ?? 1) as 1 | 2 | 3 | 4
+                  const cfIsDragging = cashflow.draggedCard === cfCardId
+                  const cfIsOver = cashflow.dropTarget === cfCardId && cashflow.draggedCard !== cfCardId
+                  const cfWrapStyle: React.CSSProperties = {
+                    ...s.card,
+                    position: 'relative',
+                    gridColumn: `span ${cfColSpan}`,
+                    cursor: 'grab',
+                    opacity: cfIsDragging ? 0.5 : 1,
+                    outline: cfIsOver ? '2px dashed var(--accent)' : 'none',
+                    outlineOffset: -2,
+                    transition: 'opacity 0.15s, outline 0.15s',
+                  }
+                  const cfDragProps = {
+                    draggable: true,
+                    'data-card-wrapper': true,
+                    onDragStart: cashflow.handleDragStart(cfCardId),
+                    onDragEnd: cashflow.handleDragEnd,
+                    onDragOver: cashflow.handleDragOver(cfCardId),
+                    onDragLeave: cashflow.handleDragLeave,
+                    onDrop: cashflow.handleDrop(cfCardId),
+                    onMouseEnter: () => setHoveredCard(cfCardId),
+                    onMouseLeave: () => setHoveredCard(null),
+                  }
+                  const cfResizeHandles = (
+                    <>
+                      <ResizeHandle side="left" cardId={cfCardId} currentSpan={cfColSpan} gridRef={cashflowGridRef} onResize={cashflow.updateSpan} visible={hoveredCard === cfCardId} />
+                      <ResizeHandle side="right" cardId={cfCardId} currentSpan={cfColSpan} gridRef={cashflowGridRef} onResize={cashflow.updateSpan} visible={hoveredCard === cfCardId} />
+                    </>
+                  )
 
-              {/* Cash flow timeline */}
-              <div style={s.card}>
-                <h2 style={s.cardTitle}>
-                  תזרים מזומנים
-                  <span style={s.cardSub}>{allBankEntries.length} רשומות</span>
-                  <div style={{ marginRight: 'auto', display: 'flex', gap: 8 }}>
-                    <button
-                      style={s.cfImportBtn}
-                      onClick={() => bankFileRef.current?.click()}
-                    >
-                      <Upload size={14} strokeWidth={1.75} /> ייבוא דוח בנק
-                    </button>
-                    <button
-                      style={s.cfImportBtn}
-                      onClick={() => addBankEntry({ date: new Date(), source: 'manual', status: 'expected' })}
-                    >
-                      + הוסף שורה
-                    </button>
-                  </div>
-                </h2>
-                <CashFlowTimeline
-                  entries={allBankEntries}
-                  startingBalance={bankSettings.startingBalance}
-                  projectionMonths={1}
-                  onUpdateEntry={updateBankEntry}
-                  onDeleteEntry={deleteBankEntry}
-                />
+                  if (cfCardId === 'cf-creditcard') return (
+                    <div key={cfCardId} style={cfWrapStyle} {...cfDragProps}>
+                      {cfResizeHandles}
+                      <CreditCardBox
+                        payments={ccPayments}
+                        onAdd={addCcPayment}
+                        onUpdate={updateCcPayment}
+                        onDelete={deleteCcPayment}
+                      />
+                    </div>
+                  )
+
+                  if (cfCardId === 'cf-balancechart') return (() => {
+                    // Build sorted entries with running balance for the chart
+                    const sorted = [...allBankEntries].sort((a, b) => a.date.getTime() - b.date.getTime())
+
+                    // Also generate projections for recurring entries (same logic as CashFlowTimeline)
+                    const projEntries: typeof sorted = []
+                    const recurringForProj = allBankEntries.filter((e) => e.recurring)
+                    const today = new Date()
+                    for (const entry of recurringForProj) {
+                      const dayOfMonth = entry.date.getDate()
+                      for (let m = 0; m <= 1; m++) {
+                        const targetMonth = today.getMonth() + m
+                        const targetYear = today.getFullYear() + Math.floor(targetMonth / 12)
+                        const normalizedMonth = ((targetMonth % 12) + 12) % 12
+                        const daysInM = new Date(targetYear, normalizedMonth + 1, 0).getDate()
+                        const day = Math.min(dayOfMonth, daysInM)
+                        const projDate = new Date(targetYear, normalizedMonth, day)
+                        const mk = `${projDate.getFullYear()}-${String(projDate.getMonth() + 1).padStart(2, '0')}`
+                        const exists = allBankEntries.some(
+                          (e) => e.vendor === entry.vendor &&
+                            `${e.date.getFullYear()}-${String(e.date.getMonth() + 1).padStart(2, '0')}` === mk &&
+                            !e.id.startsWith('proj_')
+                        )
+                        if (!exists) {
+                          projEntries.push({ ...entry, id: `proj_${entry.id}_${m}`, date: projDate, status: projDate <= today ? 'actual' : 'expected', source: entry.source })
+                        }
+                      }
+                    }
+
+                    const allSorted = [...sorted, ...projEntries].sort((a, b) => a.date.getTime() - b.date.getTime())
+
+                    const fromDate = chartDateFrom ? new Date(chartDateFrom + 'T00:00:00') : null
+                    const toDate = chartDateTo ? new Date(chartDateTo + 'T23:59:59') : null
+
+                    let balance = bankSettings.startingBalance
+                    const chartData: BalancePoint[] = []
+                    let minVal = Infinity
+                    let minLabel = ''
+                    let minSeries: 'actual' | 'proj' = 'actual'
+
+                    for (const entry of allSorted) {
+                      balance += entry.receipt - entry.payment
+                      const entryTime = entry.date.getTime()
+
+                      if (fromDate && entryTime < fromDate.getTime()) continue
+                      if (toDate && entryTime > toDate.getTime()) continue
+
+                      const isProj = entry.id.startsWith('proj_') || entry.status === 'expected'
+                      const label = entry.date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })
+                      const dateStr = entry.date.toISOString().slice(0, 10)
+
+                      const prev = chartData[chartData.length - 1]
+                      if (prev && prev.date === dateStr) {
+                        if (isProj) prev.proj = balance
+                        else { prev.actual = balance; prev.proj = balance }
+                      } else {
+                        chartData.push({
+                          label,
+                          date: dateStr,
+                          actual: isProj ? null : balance,
+                          proj: isProj ? balance : balance,
+                        })
+                      }
+
+                      if (balance < minVal) {
+                        minVal = balance
+                        minLabel = label
+                        minSeries = isProj ? 'proj' : 'actual'
+                      }
+                    }
+
+                    // Bridge: set proj on last actual point so the line connects
+                    for (let i = 0; i < chartData.length - 1; i++) {
+                      if (chartData[i].actual !== null && chartData[i + 1].actual === null && chartData[i].proj === null) {
+                        chartData[i].proj = chartData[i].actual
+                      }
+                    }
+
+                    return (
+                      <div key={cfCardId} style={cfWrapStyle} {...cfDragProps}>
+                        {cfResizeHandles}
+                        <h2 style={s.cardTitle}>
+                          <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                          מסלול יתרה צפוי
+                          <HelpTooltip text="גרף מסלול היתרה לאורך זמן — קו ירוק רציף מייצג תנועות בפועל, קו סגול מקווקו מייצג תחזית. הנקודה האדומה מסמנת את שפל היתרה" />
+                          <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 400 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
+                              מ-
+                              <input type="date" value={chartDateFrom} onChange={(e) => setChartDateFrom(e.target.value)} style={s.cfInput} />
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
+                              עד
+                              <input type="date" value={chartDateTo} onChange={(e) => setChartDateTo(e.target.value)} style={s.cfInput} />
+                            </label>
+                            {(chartDateFrom || chartDateTo) && (
+                              <button
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit', padding: '2px 6px' }}
+                                onClick={() => { setChartDateFrom(''); setChartDateTo('') }}
+                              >
+                                נקה
+                              </button>
+                            )}
+                          </div>
+                        </h2>
+                        {chartData.length > 0 ? (
+                          <BalanceChart
+                            data={chartData}
+                            minBalanceLabel={minVal < Infinity ? minLabel : undefined}
+                            minBalanceValue={minVal < Infinity ? minVal : undefined}
+                            minBalanceSeries={minSeries}
+                          />
+                        ) : (
+                          <p style={s.empty}>אין נתונים להצגה.</p>
+                        )}
+                      </div>
+                    )
+                  })()
+
+                  if (cfCardId === 'cf-timeline') return (
+                    <div key={cfCardId} style={cfWrapStyle} {...cfDragProps}>
+                      {cfResizeHandles}
+                      <h2 style={s.cardTitle}>
+                        <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                        תזרים מזומנים
+                        <HelpTooltip text="טבלת כל התנועות בחשבון — תשלומים, תקבולות ויתרה מצטברת. סמן תנועה כקבועה כדי להקרין אותה לחודשים הבאים" />
+                        <span style={s.cardSub}>{allBankEntries.length} רשומות</span>
+                        <div style={{ marginRight: 'auto', display: 'flex', gap: 8 }}>
+                          <button
+                            style={s.cfImportBtn}
+                            onClick={() => bankFileRef.current?.click()}
+                          >
+                            <Upload size={14} strokeWidth={1.75} /> ייבוא דוח בנק
+                          </button>
+                          <button
+                            style={s.cfImportBtn}
+                            onClick={() => addBankEntry({ date: new Date(), source: 'manual', status: 'expected' })}
+                          >
+                            + הוסף שורה
+                          </button>
+                        </div>
+                      </h2>
+                      <CashFlowTimeline
+                        entries={allBankEntries}
+                        startingBalance={bankSettings.startingBalance}
+                        projectionMonths={1}
+                        onUpdateEntry={updateBankEntry}
+                        onDeleteEntry={deleteBankEntry}
+                      />
+                    </div>
+                  )
+
+                  return null
+                })}
               </div>
 
             </>
@@ -735,6 +1003,8 @@ const s: Record<string, React.CSSProperties> = {
   filterBtn: { padding: '6px 14px', border: '1px solid transparent', borderRadius: '7px', background: 'transparent', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'inherit', cursor: 'pointer' },
   filterActive: { background: 'var(--bg-primary)', color: 'var(--text-primary)', fontWeight: 700, border: '1px solid var(--border)' },
   splitSummary: { fontSize: '13px', color: 'var(--text-secondary)', direction: 'rtl' },
+  insightGrid: { display: 'grid', gap: '20px' },
+  dragHandle: { cursor: 'grab', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, userSelect: 'none' as const, flexShrink: 0 },
   cardRow: { display: 'flex', gap: '20px', flexWrap: 'wrap' },
   card: { flex: '1 1 0', minWidth: 0, background: 'var(--bg-surface)', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
   cardTitle: { margin: '0 0 20px', fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', direction: 'rtl', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },

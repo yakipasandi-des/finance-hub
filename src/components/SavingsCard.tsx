@@ -6,6 +6,8 @@ interface Props {
   accounts: SavingsAccount[]
   onUpdate: (id: string, changes: Partial<Omit<SavingsAccount, 'id'>>) => void
   onDelete: (id: string) => void
+  savingsGoal: number
+  onSetGoal: (amount: number) => void
 }
 
 function fmt(n: number) {
@@ -23,11 +25,14 @@ interface RowDraft {
   amount: string
 }
 
-export function SavingsCard({ accounts, onUpdate, onDelete }: Props) {
+export function SavingsCard({ accounts, onUpdate, onDelete, savingsGoal, onSetGoal }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<RowDraft>({ name: '', managedBy: '', amount: '' })
   const [hoveredRow, setHoveredRow] = useState<string | null>(null)
   const [hoveredField, setHoveredField] = useState<string | null>(null)
+  const [editingGoal, setEditingGoal] = useState(false)
+  const [goalDraft, setGoalDraft] = useState('')
+  const goalInputRef = useRef<HTMLInputElement>(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const prevFirstIdRef = useRef<string | undefined>(accounts[0]?.id)
 
@@ -44,6 +49,24 @@ export function SavingsCard({ accounts, onUpdate, onDelete }: Props) {
   useEffect(() => {
     if (editingId) nameRef.current?.focus()
   }, [editingId])
+
+  useEffect(() => {
+    if (editingGoal) goalInputRef.current?.focus()
+  }, [editingGoal])
+
+  function startGoalEdit() {
+    setGoalDraft(savingsGoal > 0 ? String(savingsGoal) : '')
+    setEditingGoal(true)
+  }
+
+  function commitGoalEdit() {
+    onSetGoal(parseFloat(goalDraft) || 0)
+    setEditingGoal(false)
+  }
+
+  function cancelGoalEdit() {
+    setEditingGoal(false)
+  }
 
   function startEdit(account: SavingsAccount) {
     if (editingId === account.id) return
@@ -162,8 +185,54 @@ export function SavingsCard({ accounts, onUpdate, onDelete }: Props) {
         <div style={s.totalRow}>
           <span style={s.totalLabel}>סה״כ חסכונות</span>
           <span style={s.totalAmount}>{fmt(total)}</span>
+          {editingGoal ? (
+            <span style={s.goalEditWrap}>
+              <input
+                ref={goalInputRef}
+                style={s.goalInput}
+                type="number"
+                placeholder="סכום יעד"
+                value={goalDraft}
+                onChange={(e) => setGoalDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') commitGoalEdit(); if (e.key === 'Escape') cancelGoalEdit() }}
+              />
+              <button style={s.goalSmallBtn} onClick={commitGoalEdit}><Check size={12} strokeWidth={2} /></button>
+              <button style={{ ...s.goalSmallBtn, color: 'var(--red)' }} onClick={cancelGoalEdit}><X size={12} strokeWidth={2} /></button>
+            </span>
+          ) : (
+            <button style={s.goalBtn} onClick={startGoalEdit}>
+              {savingsGoal > 0 ? 'ערוך יעד' : 'הגדר יעד'}
+            </button>
+          )}
         </div>
       )}
+
+      {savingsGoal > 0 && accounts.length > 0 && (() => {
+        const pct = Math.min(Math.round((total / savingsGoal) * 100), 100)
+        const reached = total >= savingsGoal
+        const remaining = savingsGoal - total
+        return (
+          <div style={s.goalSection}>
+            <div style={s.progressTrack}>
+              <div style={{
+                ...s.progressFill,
+                width: `${pct}%`,
+                ...(reached ? { background: 'var(--green)', boxShadow: '0 0 10px rgba(13,148,136,0.45)' } : {}),
+              }} />
+            </div>
+            <div style={s.goalLabels}>
+              <span style={s.goalText}>{fmt(total)} מתוך {fmt(savingsGoal)}</span>
+              <span style={s.goalPct}>{pct}%</span>
+            </div>
+            <div style={s.goalRemaining}>
+              {reached
+                ? <span style={{ color: 'var(--green)', fontWeight: 600 }}>הגעת ליעד!</span>
+                : <span>נותרו {fmt(remaining)}</span>
+              }
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -180,7 +249,18 @@ const s: Record<string, React.CSSProperties> = {
   input: { flex: '2 1 0', fontSize: 13, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'inherit', background: 'var(--bg-primary)', color: 'var(--text-primary)', minWidth: 0, direction: 'rtl' },
   amountInput: { flex: '1 0 80px', textAlign: 'left', direction: 'ltr' },
   actionBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '2px 4px', color: 'var(--text-muted)', flexShrink: 0, lineHeight: 1 },
-  totalRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 6px 4px', borderTop: '2px solid var(--border)', marginTop: 4 },
+  totalRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 6px 4px', borderTop: '2px solid var(--border)', marginTop: 4 },
   totalLabel: { fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' },
-  totalAmount: { fontSize: 15, fontWeight: 700, color: 'var(--green)' },
+  totalAmount: { fontSize: 15, fontWeight: 700, color: 'var(--green)', marginLeft: 'auto' },
+  goalBtn: { background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '2px 10px', fontSize: 11, fontFamily: 'inherit', color: 'var(--text-muted)', cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  goalEditWrap: { display: 'flex', alignItems: 'center', gap: 4 },
+  goalInput: { width: 90, padding: '3px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: 'var(--bg-primary)', color: 'var(--text-primary)', direction: 'ltr' as const, textAlign: 'left' as const },
+  goalSmallBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', color: 'var(--text-muted)', lineHeight: 1 },
+  goalSection: { padding: '8px 6px 4px', display: 'flex', flexDirection: 'column' as const, gap: 6 },
+  progressTrack: { width: '100%', height: 10, background: 'var(--border)', borderRadius: 5, overflow: 'hidden' as const },
+  progressFill: { height: '100%', background: 'var(--green)', borderRadius: 5, transition: 'width 0.4s ease, box-shadow 0.4s ease' },
+  goalLabels: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  goalText: { fontSize: 12, color: 'var(--text-secondary)' },
+  goalPct: { fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' },
+  goalRemaining: { fontSize: 12, color: 'var(--text-muted)' },
 }

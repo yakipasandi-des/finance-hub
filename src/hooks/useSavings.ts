@@ -2,6 +2,18 @@ import { useState, useCallback } from 'react'
 import type { SavingsAccount } from '../types'
 
 const LS_KEY = 'savings'
+const GOAL_KEY = 'savings-goal'
+
+function loadGoal(): number {
+  try {
+    const raw = localStorage.getItem(GOAL_KEY)
+    if (raw) {
+      const n = JSON.parse(raw)
+      if (typeof n === 'number' && n >= 0) return n
+    }
+  } catch { /* ignore */ }
+  return 0
+}
 
 function load(): SavingsAccount[] {
   try {
@@ -24,6 +36,13 @@ function makeId(): string {
 
 export function useSavings() {
   const [accounts, setAccounts] = useState<SavingsAccount[]>(load)
+  const [savingsGoal, setSavingsGoalState] = useState<number>(loadGoal)
+
+  const setSavingsGoal = useCallback((amount: number) => {
+    const val = Math.max(0, amount)
+    setSavingsGoalState(val)
+    localStorage.setItem(GOAL_KEY, JSON.stringify(val))
+  }, [])
 
   const addAccount = useCallback(() => {
     const next: SavingsAccount = { id: makeId(), name: '', managedBy: '', amount: 0, updatedAt: Date.now() }
@@ -51,5 +70,5 @@ export function useSavings() {
     })
   }, [])
 
-  return { accounts, addAccount, updateAccount, deleteAccount }
+  return { accounts, addAccount, updateAccount, deleteAccount, savingsGoal, setSavingsGoal }
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Trash2, Check, X, CreditCard } from 'lucide-react'
 import type { CreditCardPayment } from '../types'
+import { HelpTooltip } from './HelpTooltip'
 
 interface CreditCardBoxProps {
   payments: CreditCardPayment[]
@@ -60,9 +61,10 @@ export function CreditCardBox({ payments, onAdd, onUpdate, onDelete }: CreditCar
   return (
     <div style={s.box}>
       <div style={s.header}>
+        <span style={{ cursor: 'grab', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, userSelect: 'none' as const, flexShrink: 0 }} title="גרור לשינוי סדר">⠿</span>
         <CreditCard size={18} style={{ color: 'var(--accent)' }} />
-        <h3 style={s.title}>תשלום כרטיס אשראי קרוב</h3>
-        <button style={s.addBtn} onClick={handleAdd}>+ הוסף תשלום</button>
+        <h3 style={s.title}>חיוב אשראי <HelpTooltip text="סכומי חיוב כרטיס אשראי צפויים — מופיעים כתשלום בתזרים המזומנים" /></h3>
+        <button style={s.addBtn} onClick={handleAdd}>+ הוסף</button>
       </div>
 
       {sorted.length === 0 ? (
@@ -152,12 +154,8 @@ export function CreditCardBox({ payments, onAdd, onUpdate, onDelete }: CreditCar
 
 const s: Record<string, React.CSSProperties> = {
   box: {
-    background: 'var(--bg-surface)',
-    borderRadius: 16,
-    padding: '20px 24px',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-    border: '1px solid var(--border)',
     direction: 'rtl',
+    flex: 1,
   },
   header: {
     display: 'flex',
