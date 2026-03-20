@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { BarChart2, Tag, List, Settings, FilePlus, Wallet, ChevronLeft, Upload, Moon, Sun, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { Logo } from './Logo'
+import { ChatWidget } from './ChatWidget'
 import type { Transaction, BankEntry } from '../types'
 import { getCategoryById, getChildCategories, getParentCategories } from '../categories'
 import { CategoryIcon } from '../icons'
@@ -152,6 +153,7 @@ function DashboardContent({
     filteredTransactions,
     allTransactions,
     activeFilterCount,
+    updateFilters,
   } = useFilters()
 
   const [tab, setTab] = useState<Tab>('insights')
@@ -992,7 +994,7 @@ function DashboardContent({
                             <Upload size={14} strokeWidth={1.75} /> ייבוא דוח בנק
                           </button>
                           <button
-                            style={s.cfImportBtn}
+                            style={s.cfAddRowBtn}
                             onClick={() => addBankEntry({ date: new Date(), source: 'manual', status: 'expected' })}
                           >
                             + הוסף שורה
@@ -1028,6 +1030,16 @@ function DashboardContent({
         )}
       </div>
         </div>{/* end mainArea */}
+        <ChatWidget
+          hasData={allTransactions.length > 0}
+          allTransactions={allTransactions}
+          filteredTransactions={filteredTransactions}
+          map={map}
+          budgets={budgets}
+          recurringMerchants={recurringMerchants}
+          onNavigate={(t) => setTab(t as Tab)}
+          onApplyFilter={(f) => updateFilters(f)}
+        />
       </div>{/* end bodyWrap */}
     </div>
   )
@@ -1097,4 +1109,5 @@ const s: Record<string, React.CSSProperties> = {
   metricValue: { display: 'block', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' },
   cfInput: { padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontSize: 13, background: 'var(--bg-primary)', color: 'var(--text-primary)', direction: 'rtl', outline: 'none', transition: 'border-color 0.15s ease' },
   cfImportBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginRight: 'auto', transition: 'opacity 0.15s ease' },
+  cfAddRowBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s ease' },
 }
