@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { GripVertical, Pencil, Trash2, Download, Upload, ChevronDown, ChevronLeft } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { GripVertical, Pencil, Trash2, Download, Upload, ChevronDown, ChevronLeft, Eye, EyeOff, Key } from 'lucide-react'
 import type { Transaction } from '../types'
 import { Category, PALETTE_COLORS, EMOJI_PRESETS, getParentCategories, getChildCategories, buildCategoryTree } from '../categories'
 import { CategoryIcon } from '../icons'
@@ -28,6 +28,30 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
   const [importError, setImportError] = useState<string | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const [expandedParent, setExpandedParent] = useState<string | null>(null)
+
+  // Claude API key
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('anthropic-api-key') ?? '')
+  const [showKey, setShowKey] = useState(false)
+  const [keySaved, setKeySaved] = useState(false)
+
+  // Claude model
+  const [model, setModel] = useState(() => localStorage.getItem('anthropic-model') || 'claude-haiku-4-5')
+
+  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    setModel(val)
+    localStorage.setItem('anthropic-model', val)
+  }
+
+  const handleSaveKey = () => {
+    if (apiKey.trim()) {
+      localStorage.setItem('anthropic-api-key', apiKey.trim())
+    } else {
+      localStorage.removeItem('anthropic-api-key')
+    }
+    setKeySaved(true)
+    setTimeout(() => setKeySaved(false), 2000)
+  }
 
   function handleExport() {
     const data = {
@@ -249,6 +273,45 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
             )
           })}
         </div>
+      </section>
+
+      {/* ── Claude API ── */}
+      <section style={s.section}>
+        <h2 style={s.sectionTitle}><Key size={16} strokeWidth={1.75} style={{ verticalAlign: 'middle', marginLeft: 6 }} />Claude API</h2>
+        <p style={s.backupDesc}>הזן מפתח API של Anthropic כדי להפעיל תובנות חכמות, סיווג אוטומטי ושאילתות בשפה טבעית. המפתח נשמר בדפדפן בלבד.</p>
+        <div style={s.apiKeyRow}>
+          <div style={s.apiKeyInputWrap}>
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-ant-..."
+              style={s.apiKeyInput}
+              dir="ltr"
+            />
+            <button
+              style={s.apiKeyToggle}
+              onClick={() => setShowKey(!showKey)}
+              title={showKey ? 'הסתר' : 'הצג'}
+            >
+              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <button style={s.backupBtn} onClick={handleSaveKey}>
+            {keySaved ? '✓ נשמר' : 'שמור'}
+          </button>
+        </div>
+        <div style={s.apiModelRow}>
+          <label style={s.backupLabel}>מודל</label>
+          <select value={model} onChange={handleModelChange} style={s.apiSelect}>
+            <option value="claude-haiku-4-5">Haiku 4.5 (מהיר וחסכוני)</option>
+            <option value="claude-sonnet-4-6">Sonnet 4.6 (מאוזן)</option>
+            <option value="claude-opus-4-6">Opus 4.6 (מתקדם)</option>
+          </select>
+        </div>
+        {apiKey && !apiKey.startsWith('sk-ant-') && (
+          <p style={s.importError}>מפתח API צריך להתחיל ב-sk-ant-</p>
+        )}
       </section>
 
       {/* ── Backup & Restore ── */}
@@ -699,6 +762,10 @@ const s: Record<string, React.CSSProperties> = {
   radioGroup: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px 0' },
   radioRow: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' },
   reassignSelect: { padding: '3px 8px', border: '1px solid var(--border)', borderRadius: '6px', fontFamily: 'inherit', fontSize: '13px', background: 'var(--bg-surface)', direction: 'rtl' },
+  apiKeyRow: { display: 'flex', gap: '10px', alignItems: 'center' },
+  apiKeyInputWrap: { position: 'relative', flex: 1, maxWidth: 400 },
+  apiKeyInput: { width: '100%', boxSizing: 'border-box', padding: '9px 40px 9px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontFamily: 'monospace', fontSize: '13px', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none' },
+  apiKeyToggle: { position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' },
   backupDesc: { margin: '0 0 16px', fontSize: '13px', color: 'var(--text-muted)' },
   backupRow: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
   backupItem: { flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)' },
@@ -706,4 +773,6 @@ const s: Record<string, React.CSSProperties> = {
   backupMeta: { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' },
   backupBtn: { display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start', padding: '7px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: 'inherit', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
   importError: { margin: '8px 0 0', fontSize: '13px', color: 'var(--red)' },
+  apiModelRow: { display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px' },
+  apiSelect: { padding: '9px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontFamily: 'inherit', fontSize: '13px', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none', direction: 'rtl' },
 }
