@@ -5,6 +5,7 @@ import {
   ResponsiveContainer, Cell, Legend, PieChart, Pie, Sector,
 } from 'recharts'
 import { BarChart2, Tag, List, Settings, FilePlus, Wallet, ChevronLeft, Upload, Moon, Sun, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { Logo } from './Logo'
 import type { Transaction, BankEntry } from '../types'
 import { getCategoryById, getChildCategories, getParentCategories } from '../categories'
 import { CategoryIcon } from '../icons'
@@ -302,16 +303,16 @@ function DashboardContent({
         <nav style={{ ...s.sidebar, width: sidebarWidth }}>
           {/* Logo */}
           <div style={s.sidebarHeader}>
-            <span style={{ ...s.logo, ...(sidebarCollapsed ? { fontSize: 0, width: 0, overflow: 'hidden' } : {}) }}>Finance Hub</span>
+            <Logo size={36} />
           </div>
 
           {/* Nav items */}
           <div style={s.sidebarNav}>
             {([
               ['insights',     <BarChart2 size={20} strokeWidth={1.75} />, 'תובנות'],
+              ['cashflow',     <Wallet size={20} strokeWidth={1.75} />, 'תזרים מזומנים'],
               ['mapping',      <Tag size={20} strokeWidth={1.75} />, 'מיפוי קטגוריות'],
               ['transactions', <List size={20} strokeWidth={1.75} />, 'כל העסקאות'],
-              ['cashflow',     <Wallet size={20} strokeWidth={1.75} />, 'תזרים מזומנים'],
               ['settings',     <Settings size={20} strokeWidth={1.75} />, 'הגדרות'],
             ] as [Tab, React.ReactNode, string][]).map(([id, icon, label]) => (
               <button
@@ -511,10 +512,22 @@ function DashboardContent({
                               >
                                 {catChartData.map((d, i) => <Cell key={i} fill={d.color} stroke="none" />)}
                               </Pie>
-                              <Tooltip formatter={(v: number) => [fmt(v), 'סכום']} contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13, background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                              <Tooltip
+                                content={({ active, payload }) => {
+                                  if (!active || !payload?.[0]) return null
+                                  const entry = payload[0]
+                                  return (
+                                    <div style={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13, background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 6, padding: '6px 10px', textAlign: 'center' }}>
+                                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{entry.name}</div>
+                                      <div style={{ fontWeight: 600 }}>{fmt(entry.value as number)}</div>
+                                    </div>
+                                  )
+                                }}
+                                wrapperStyle={{ zIndex: 10 }}
+                              />
                             </PieChart>
                           </ResponsiveContainer>
-                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
+                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none', zIndex: 1 }}>
                             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>סה״כ</div>
                             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{fmt(catChartData.reduce((s, d) => s + d.amount, 0))}</div>
                           </div>
@@ -575,6 +588,7 @@ function DashboardContent({
                           <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--text-secondary)', fontFamily: 'inherit' }} />
                           <YAxis width={55} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : v)} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
                           <Tooltip
+                            cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                             formatter={(v: number, name: string) => {
                               if (name === '_uncat') return [fmt(v), 'לא ממופה']
                               const cat = getCategoryById(name, categories)
@@ -1049,7 +1063,7 @@ const s: Record<string, React.CSSProperties> = {
   logo: { fontSize: '18px', fontWeight: 700, color: 'var(--accent)', letterSpacing: '-0.02em', whiteSpace: 'nowrap', transition: 'font-size 0.2s ease, width 0.2s ease' },
   bodyWrap: { display: 'flex', flex: 1, position: 'relative', direction: 'rtl' },
   sidebar: { position: 'fixed', top: 0, right: 0, height: '100vh', background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', zIndex: 30, transition: SIDEBAR_TRANSITION, overflow: 'hidden' },
-  sidebarHeader: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 16px 12px', borderBottom: '1px solid var(--border)', minHeight: 56, direction: 'rtl' },
+  sidebarHeader: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '20px 16px 12px', borderBottom: '1px solid var(--border)', minHeight: 56, direction: 'rtl' },
   sidebarNav: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px 10px', flex: 1 },
   sidebarFooter: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px 12px', borderTop: '1px solid var(--border)' },
   addFilesBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '10px 12px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'var(--accent)', color: '#fff', fontSize: '13px', fontFamily: 'inherit', fontWeight: 600, cursor: 'pointer', transition: 'opacity 0.15s ease', whiteSpace: 'nowrap', direction: 'rtl', overflow: 'hidden', width: '100%' },

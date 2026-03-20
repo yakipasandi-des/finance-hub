@@ -126,7 +126,7 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
           style={{ ...styles.toggleBtn, ...(smoothed ? styles.toggleActive : {}) }}
           onClick={() => setSmoothed(true)}
         >
-          ממוצע נע
+          ממוצע 3 חודשים
         </button>
       </div>
 
@@ -137,6 +137,7 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
           <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--text-secondary)', fontFamily: 'inherit' }} />
           <YAxis width={55} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : String(v))} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
           <Tooltip
+            cursor={{ fill: 'rgba(0,0,0,0.04)' }}
             formatter={(v: number, name: string) => {
               const cat = categories.find((c) => c.id === name)
               return [fmt(v), cat ? cat.name : name]
@@ -199,28 +200,29 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
       {topMovers.length > 0 && (
         <div style={styles.moversSection}>
           <div style={styles.moversTitle}>מובילי שינוי</div>
-          {topMovers.map((mover, i) => {
-            const isIncrease = mover.change > 0
-            // For expenses: increase = bad (red), decrease = good (green)
-            const color = isIncrease ? 'var(--red)' : 'var(--green)'
-            const arrow = isIncrease ? '↑' : '↓'
-            return (
-              <div key={i} style={styles.moverRow}>
-                <span style={{ color: mover.cat.color, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                  <CategoryIcon icon={mover.cat.icon} size={16} />
-                </span>
-                <span style={styles.moverName}>{mover.cat.name}</span>
-                <span style={{ color, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 2 }}>
-                  {arrow} {fmt(Math.abs(mover.change))}
-                </span>
-                {mover.pctChange !== 0 && (
-                  <span style={{ color, fontSize: 11, fontWeight: 500 }}>
-                    ({Math.abs(Math.round(mover.pctChange))}%)
+          <div style={styles.moversRow}>
+            {topMovers.map((mover, i) => {
+              const isIncrease = mover.change > 0
+              const color = isIncrease ? 'var(--red)' : 'var(--green)'
+              const arrow = isIncrease ? '↑' : '↓'
+              return (
+                <div key={i} style={styles.moverItem}>
+                  <span style={{ color: mover.cat.color, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                    <CategoryIcon icon={mover.cat.icon} size={16} />
                   </span>
-                )}
-              </div>
-            )
-          })}
+                  <span style={styles.moverName}>{mover.cat.name}</span>
+                  <span style={{ color, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {arrow} {fmt(Math.abs(mover.change))}
+                  </span>
+                  {mover.pctChange !== 0 && (
+                    <span style={{ color, fontSize: 11, fontWeight: 500 }}>
+                      ({Math.abs(Math.round(mover.pctChange))}%)
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -236,6 +238,7 @@ const styles: Record<string, React.CSSProperties> = {
   legendItem: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'inherit', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 4 },
   moversSection: { marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', direction: 'rtl' },
   moversTitle: { fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10 },
-  moverRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 13 },
+  moversRow: { display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' as const },
+  moverItem: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 },
   moverName: { color: 'var(--text-secondary)', fontSize: 13 },
 }

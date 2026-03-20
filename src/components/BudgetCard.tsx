@@ -3,7 +3,7 @@ import type React from 'react'
 import { useFilters } from '../context/FilterContext'
 import { useCategories } from '../context/CategoriesContext'
 import { CategoryIcon } from '../icons'
-import { Trash2, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Trash2, ArrowRight, ArrowLeft } from 'lucide-react'
 import type { ManualEntry, BankEntry } from '../types'
 import { buildCategoryTree, getChildCategories } from '../categories'
 
@@ -191,7 +191,7 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
             disabled={!canGoOlder}
             title="חודש קודם"
           >
-            <ChevronRight size={16} strokeWidth={2} />
+            <ArrowRight size={14} strokeWidth={2} />
           </button>
           <span style={s.monthLabel}>{displayMonthLbl}</span>
           <button
@@ -200,7 +200,7 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
             disabled={!canGoNewer}
             title="חודש הבא"
           >
-            <ChevronLeft size={16} strokeWidth={2} />
+            <ArrowLeft size={14} strokeWidth={2} />
           </button>
         </div>
       )}
@@ -348,7 +348,7 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
 const s: Record<string, React.CSSProperties> = {
   container: { display: 'flex', flexDirection: 'column', gap: 12, direction: 'rtl' },
   monthPicker: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 4 },
-  monthArrow: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 6, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', transition: 'background 0.15s' },
+  monthArrow: { background: '#fff', border: '1px solid var(--border)', cursor: 'pointer', padding: 6, borderRadius: 8, color: '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, box-shadow 0.15s', boxShadow: 'var(--shadow-sm)', width: 28, height: 28 },
   monthLabel: { fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, minWidth: 100, textAlign: 'center' },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '24px 0' },
   emptyText: { margin: 0, fontSize: 14, color: 'var(--text-muted)', textAlign: 'center' },

@@ -54,7 +54,7 @@ html {
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Rubik', sans-serif;
+  font-family: 'Noto Sans Hebrew', sans-serif;
   font-size: 14px;
   line-height: 1.6;
   background-color: var(--bg-primary);

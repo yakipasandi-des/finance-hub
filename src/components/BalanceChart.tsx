@@ -39,6 +39,7 @@ export function BalanceChart({ data, minBalanceLabel, minBalanceValue }: Balance
           tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
         />
         <Tooltip
+          cursor={{ fill: 'rgba(0,0,0,0.04)' }}
           formatter={(v: number, name: string) => [fmt(v), name === 'actual' ? 'בפועל' : 'תחזית']}
           contentStyle={{ fontFamily: 'inherit', direction: 'rtl', fontSize: 13, background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         />
