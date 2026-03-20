@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { GripVertical, Pencil, Trash2, Download, Upload, ChevronDown, ChevronLeft, Eye, EyeOff, Key } from 'lucide-react'
 import type { Transaction } from '../types'
 import { Category, PALETTE_COLORS, EMOJI_PRESETS, getParentCategories, getChildCategories, buildCategoryTree } from '../categories'
