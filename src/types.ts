@@ -49,3 +49,27 @@ export interface Transaction {
   notes?: string           // פירוט נוסף (e.g. "הוראת קבע", "תשלום X מתוך Y")
   category?: string        // assigned by user, not from Isracard
 }
+
+// ---------------------------------------------------------------------------
+// AI Chat response types
+// ---------------------------------------------------------------------------
+export type AiTextBlock = { type: 'text'; content: string }
+export type AiTableBlock = { type: 'table'; headers: string[]; rows: string[][] }
+export type AiFilterAction = {
+  type: 'action'; action: 'filter'; label: string
+  payload: { months?: string[]; categories?: string[]; amountMin?: number; amountMax?: number }
+}
+export type AiNavigateAction = {
+  type: 'action'; action: 'navigate'; label: string
+  payload: { tab: 'insights' | 'cashflow' | 'mapping' | 'transactions' }
+}
+export type AiBlock = AiTextBlock | AiTableBlock | AiFilterAction | AiNavigateAction
+export type AiResponse = { blocks: AiBlock[] }
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'error'
+  content: string          // raw text for user/error messages
+  blocks?: AiBlock[]       // parsed blocks for assistant messages
+  loading?: boolean        // true while streaming
+}
