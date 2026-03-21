@@ -6,6 +6,7 @@ interface CashFlowTimelineProps {
   entries: BankEntry[]
   startingBalance: number
   projectionMonths: number
+  projectionEndDate?: Date
   onUpdateEntry: (id: string, changes: Partial<BankEntry>) => void
   onDeleteEntry: (id: string) => void
 }
@@ -73,6 +74,7 @@ export function CashFlowTimeline({
   entries,
   startingBalance,
   projectionMonths,
+  projectionEndDate,
   onUpdateEntry,
   onDeleteEntry,
 }: CashFlowTimelineProps) {
@@ -83,6 +85,7 @@ export function CashFlowTimeline({
   // Generate projections and merge with actual entries
   const projections = generateProjections(entries, projectionMonths)
   const allEntries = [...entries, ...projections]
+    .filter((e) => !projectionEndDate || e.date <= projectionEndDate)
   allEntries.sort((a, b) => a.date.getTime() - b.date.getTime())
 
   // Compute running balance (always oldest-first)

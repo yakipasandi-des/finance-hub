@@ -162,9 +162,9 @@ function DashboardContent({
   const [selectedParent, setSelectedParent] = useState<string | null>(null)
   const [hoveredCatIdx, setHoveredCatIdx] = useState<number | null>(null)
 
-  // --- Balance chart date range filter ---
-  const [chartDateFrom, setChartDateFrom] = useState('')
-  const [chartDateTo, setChartDateTo] = useState('')
+  // --- Projection date range ---
+  const [projDateFrom, setProjDateFrom] = useState('')
+  const [projDateTo, setProjDateTo] = useState('')
 
   // --- Layout hooks for insights and cash flow ---
   const insights = useCardLayout('finance-hub-insights-layout', DEFAULT_INSIGHTS_LAYOUT)
@@ -396,33 +396,13 @@ function DashboardContent({
         {/* ─ INSIGHTS ─ */}
         {tab === 'insights' && (
           <>
-            <FilterBar />
-
-            {/* Split filter */}
-            <div style={s.filterRow}>
-              <div style={s.filterGroup}>
-                {([
-                  ['all', 'הכל'],
-                  ['variable', 'הוצאות משתנות'],
-                  ['recurring', 'הוצאות קבועות'],
-                ] as [SpendFilter, string][]).map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => setSpendFilter(id)}
-                    style={{ ...s.filterBtn, ...(spendFilter === id ? s.filterActive : {}) }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {spendFilter !== 'all' && (
-                <div style={s.splitSummary}>
-                  <span>קבועות: {fmt(recurringTotal)} ({total > 0 ? Math.round(recurringTotal / total * 100) : 0}%)</span>
-                  <span style={{ margin: '0 10px', color: 'var(--border)' }}>|</span>
-                  <span>משתנות: {fmt(variableTotal)} ({total > 0 ? Math.round(variableTotal / total * 100) : 0}%)</span>
-                </div>
-              )}
-            </div>
+            <FilterBar
+              spendFilter={spendFilter}
+              setSpendFilter={setSpendFilter}
+              recurringTotal={recurringTotal}
+              variableTotal={variableTotal}
+              total={total}
+            />
 
             {/* Draggable insight cards in 4-column grid */}
             <div ref={insightsGridRef} style={{ ...s.insightGrid, gridTemplateColumns: 'repeat(4, 1fr)' }}>
@@ -717,13 +697,42 @@ function DashboardContent({
           const actualReceipts = actualEntries.reduce((s, e) => s + e.receipt, 0)
           const currentBalance = bankSettings.startingBalance + actualReceipts - actualPayments
 
-          // Projected balance: current + all expected entries + recurring projected forward
+          // Projection date range
+          const projTo = projDateTo ? new Date(projDateTo + 'T23:59:59') : (() => {
+            const d = new Date(); d.setMonth(d.getMonth() + 1); return d
+          })()
+          const projFrom = projDateFrom ? new Date(projDateFrom + 'T00:00:00') : new Date()
+          const derivedProjectionMonths = Math.max(1, Math.ceil(
+            (projTo.getTime() - new Date().getTime()) / (30.44 * 24 * 60 * 60 * 1000)
+          ))
+
+          // Projected balance: current + expected entries in range + recurring projected within range
           const expectedEntries = allBankEntries.filter((e) => e.status === 'expected')
-          const expectedNet = expectedEntries.reduce((s, e) => s + e.receipt - e.payment, 0)
+          const expectedInRange = expectedEntries.filter((e) => e.date >= projFrom && e.date <= projTo)
+          const expectedNet = expectedInRange.reduce((s, e) => s + e.receipt - e.payment, 0)
           let projectedBalance = currentBalance + expectedNet
           const recurringEntries = allBankEntries.filter((e) => e.recurring)
-          for (const e of recurringEntries) {
-            projectedBalance += e.receipt - e.payment
+          const today = new Date()
+          for (const entry of recurringEntries) {
+            const dayOfMonth = entry.date.getDate()
+            for (let m = 0; m <= derivedProjectionMonths; m++) {
+              const targetMonth = today.getMonth() + m
+              const targetYear = today.getFullYear() + Math.floor(targetMonth / 12)
+              const normalizedMonth = ((targetMonth % 12) + 12) % 12
+              const daysInM = new Date(targetYear, normalizedMonth + 1, 0).getDate()
+              const day = Math.min(dayOfMonth, daysInM)
+              const projDate = new Date(targetYear, normalizedMonth, day)
+              if (projDate < projFrom || projDate > projTo) continue
+              const mk = `${projDate.getFullYear()}-${String(projDate.getMonth() + 1).padStart(2, '0')}`
+              const exists = allBankEntries.some(
+                (e) => e.vendor === entry.vendor &&
+                  `${e.date.getFullYear()}-${String(e.date.getMonth() + 1).padStart(2, '0')}` === mk &&
+                  !e.id.startsWith('proj_')
+              )
+              if (!exists) {
+                projectedBalance += entry.receipt - entry.payment
+              }
+            }
           }
 
           // --- Net monthly stats (from all entries including cc) ---
@@ -779,8 +788,8 @@ function DashboardContent({
                 </div>
                 <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
-                    יתרה צפויה (חודש קדימה)
-                    <HelpTooltip text="היתרה הנוכחית בתוספת כל התנועות הצפויות ותנועות קבועות שמוקרנות חודש קדימה" />
+                    יתרה צפויה
+                    <HelpTooltip text="היתרה הנוכחית בתוספת כל התנועות הצפויות ותנועות קבועות בטווח התאריכים שנבחר. ברירת מחדל: חודש קדימה" />
                   </span>
                   <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: projectedBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(projectedBalance)}</span>
                 </div>
@@ -802,7 +811,7 @@ function DashboardContent({
               </div>
 
               {/* Settings row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', direction: 'rtl' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', direction: 'rtl', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', padding: '10px 16px', boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
                   יתרת פתיחה:
                   <input
@@ -812,6 +821,61 @@ function DashboardContent({
                     style={{ ...s.cfInput, width: 100 }}
                   />
                 </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  תחזית:
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
+                    מ-
+                    <input type="date" value={projDateFrom} onChange={(e) => setProjDateFrom(e.target.value)} style={s.cfInput} />
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
+                    עד
+                    <input type="date" value={projDateTo} onChange={(e) => setProjDateTo(e.target.value)} style={s.cfInput} />
+                  </label>
+                  <span style={{ borderRight: '1px solid var(--border)', height: 18, margin: '0 2px' }} />
+                  {[1, 2, 3].map((m) => {
+                    const target = new Date()
+                    target.setMonth(target.getMonth() + m)
+                    const iso = target.toISOString().slice(0, 10)
+                    const isActive = projDateTo === iso && !projDateFrom
+                    return (
+                      <button
+                        key={m}
+                        style={{
+                          padding: '3px 8px',
+                          border: '1px solid var(--border)',
+                          borderRadius: 6,
+                          background: isActive ? 'var(--accent-fill)' : 'var(--bg-primary)',
+                          color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+                          fontSize: 11,
+                          fontFamily: 'inherit',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap' as const,
+                          fontWeight: isActive ? 700 : 400,
+                          ...(isActive ? { borderColor: 'var(--accent)' } : {}),
+                        }}
+                        onClick={() => { setProjDateFrom(''); setProjDateTo(isActive ? '' : iso) }}
+                      >
+                        {m === 1 ? 'חודש' : `${m} חודשים`}
+                      </button>
+                    )
+                  })}
+                </div>
+                <button
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 8,
+                    background: (projDateFrom || projDateTo) ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-primary)',
+                    color: (projDateFrom || projDateTo) ? 'var(--red)' : 'var(--text-faint)',
+                    fontSize: 12, fontFamily: 'inherit',
+                    cursor: (projDateFrom || projDateTo) ? 'pointer' : 'not-allowed',
+                    marginRight: 'auto',
+                    ...((projDateFrom || projDateTo) ? { borderColor: 'var(--red)' } : {}),
+                  }}
+                  disabled={!projDateFrom && !projDateTo}
+                  onClick={() => { setProjDateFrom(''); setProjDateTo('') }}
+                >
+                  איפוס
+                </button>
               </div>
 
               {/* Cash flow managed cards in 4-column grid */}
@@ -870,7 +934,7 @@ function DashboardContent({
                     const today = new Date()
                     for (const entry of recurringForProj) {
                       const dayOfMonth = entry.date.getDate()
-                      for (let m = 0; m <= 1; m++) {
+                      for (let m = 0; m <= derivedProjectionMonths; m++) {
                         const targetMonth = today.getMonth() + m
                         const targetYear = today.getFullYear() + Math.floor(targetMonth / 12)
                         const normalizedMonth = ((targetMonth % 12) + 12) % 12
@@ -891,8 +955,8 @@ function DashboardContent({
 
                     const allSorted = [...sorted, ...projEntries].sort((a, b) => a.date.getTime() - b.date.getTime())
 
-                    const fromDate = chartDateFrom ? new Date(chartDateFrom + 'T00:00:00') : null
-                    const toDate = chartDateTo ? new Date(chartDateTo + 'T23:59:59') : null
+                    const fromDate = projDateFrom ? new Date(projDateFrom + 'T00:00:00') : null
+                    const toDate = projDateTo ? new Date(projDateTo + 'T23:59:59') : null
 
                     let balance = bankSettings.startingBalance
                     const chartData: BalancePoint[] = []
@@ -945,24 +1009,6 @@ function DashboardContent({
                           <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
                           מסלול יתרה צפוי
                           <HelpTooltip text="גרף מסלול היתרה לאורך זמן — קו ירוק רציף מייצג תנועות בפועל, קו סגול מקווקו מייצג תחזית. הנקודה האדומה מסמנת את שפל היתרה" />
-                          <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 400 }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
-                              מ-
-                              <input type="date" value={chartDateFrom} onChange={(e) => setChartDateFrom(e.target.value)} style={s.cfInput} />
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
-                              עד
-                              <input type="date" value={chartDateTo} onChange={(e) => setChartDateTo(e.target.value)} style={s.cfInput} />
-                            </label>
-                            {(chartDateFrom || chartDateTo) && (
-                              <button
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit', padding: '2px 6px' }}
-                                onClick={() => { setChartDateFrom(''); setChartDateTo('') }}
-                              >
-                                נקה
-                              </button>
-                            )}
-                          </div>
                         </h2>
                         {chartData.length > 0 ? (
                           <BalanceChart
@@ -1004,7 +1050,8 @@ function DashboardContent({
                       <CashFlowTimeline
                         entries={allBankEntries}
                         startingBalance={bankSettings.startingBalance}
-                        projectionMonths={1}
+                        projectionMonths={derivedProjectionMonths}
+                        projectionEndDate={projTo}
                         onUpdateEntry={updateBankEntry}
                         onDeleteEntry={deleteBankEntry}
                       />
@@ -1057,10 +1104,12 @@ function SCard({ label, value, small, color, tooltip, note }: {
         {label}
         {tooltip && <HelpTooltip text={tooltip} />}
       </span>
-      <span style={{ ...s.sValue, fontSize: small ? '14px' : '22px', color: color ?? 'var(--text-primary)' }}>
-        {value}
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+        <span style={{ ...s.sValue, fontSize: small ? '14px' : '22px', color: color ?? 'var(--text-primary)' }}>
+          {value}
+        </span>
+        {note && <span style={{ fontSize: '11px', color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>{note}</span>}
       </span>
-      {note && <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{note}</span>}
     </div>
   )
 }

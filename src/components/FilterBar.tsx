@@ -3,7 +3,17 @@ import { SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { useFilters } from '../context/FilterContext'
 import { CategoryIcon } from '../icons'
 
-export function FilterBar() {
+type SpendFilter = 'all' | 'variable' | 'recurring'
+
+interface FilterBarProps {
+  spendFilter?: SpendFilter
+  setSpendFilter?: (f: SpendFilter) => void
+  recurringTotal?: number
+  variableTotal?: number
+  total?: number
+}
+
+export function FilterBar({ spendFilter, setSpendFilter, recurringTotal, variableTotal, total: spendTotal }: FilterBarProps = {}) {
   const {
     filters, updateFilters, resetFilters,
     availableMonths, availableCategories,
@@ -13,19 +23,22 @@ export function FilterBar() {
 
   const [monthOpen, setMonthOpen] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
+  const [spendOpen, setSpendOpen] = useState(false)
   const monthRef = useRef<HTMLDivElement>(null)
   const catRef = useRef<HTMLDivElement>(null)
+  const spendRef = useRef<HTMLDivElement>(null)
 
   // Close dropdowns on outside click
   useEffect(() => {
-    if (!monthOpen && !catOpen) return
+    if (!monthOpen && !catOpen && !spendOpen) return
     const handler = (e: MouseEvent) => {
       if (monthOpen && monthRef.current && !monthRef.current.contains(e.target as Node)) setMonthOpen(false)
       if (catOpen && catRef.current && !catRef.current.contains(e.target as Node)) setCatOpen(false)
+      if (spendOpen && spendRef.current && !spendRef.current.contains(e.target as Node)) setSpendOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [monthOpen, catOpen])
+  }, [monthOpen, catOpen, spendOpen])
 
   // Month toggle
   const toggleMonth = (key: string) => {
@@ -85,7 +98,7 @@ export function FilterBar() {
         <div ref={monthRef} style={s.dropWrap}>
           <button
             style={{ ...s.dropBtn, ...(filters.months.length > 0 ? s.dropBtnActive : {}) }}
-            onClick={() => { setMonthOpen((o) => !o); setCatOpen(false) }}
+            onClick={() => { setMonthOpen((o) => !o); setCatOpen(false); setSpendOpen(false) }}
           >
             {monthLabel} <ChevronDown size={12} strokeWidth={2} />
           </button>
@@ -115,7 +128,7 @@ export function FilterBar() {
         <div ref={catRef} style={s.dropWrap}>
           <button
             style={{ ...s.dropBtn, ...(filters.categories.length > 0 ? s.dropBtnActive : {}) }}
-            onClick={() => { setCatOpen((o) => !o); setMonthOpen(false) }}
+            onClick={() => { setCatOpen((o) => !o); setMonthOpen(false); setSpendOpen(false) }}
           >
             {singleCat && <CategoryIcon icon={singleCat.icon} size={13} />}
             {catLabelText} <ChevronDown size={12} strokeWidth={2} />
@@ -144,6 +157,36 @@ export function FilterBar() {
             </div>
           )}
         </div>
+
+        {/* Spend type dropdown */}
+        {spendFilter && setSpendFilter && (
+          <div ref={spendRef} style={s.dropWrap}>
+            <button
+              style={{ ...s.dropBtn, ...(spendFilter !== 'all' ? s.dropBtnActive : {}) }}
+              onClick={() => { setSpendOpen((o) => !o); setMonthOpen(false); setCatOpen(false) }}
+            >
+              {spendFilter === 'all' ? 'סוג הוצאות' : spendFilter === 'recurring' ? 'הוצאות קבועות' : 'הוצאות משתנות'}
+              {' '}<ChevronDown size={12} strokeWidth={2} />
+            </button>
+            {spendOpen && (
+              <div style={s.dropdown}>
+                {([
+                  ['all', 'הכל'],
+                  ['variable', 'הוצאות משתנות'],
+                  ['recurring', 'הוצאות קבועות'],
+                ] as [SpendFilter, string][]).map(([id, label]) => (
+                  <label
+                    key={id}
+                    style={{ ...s.dropRow, background: spendFilter === id ? 'var(--accent-fill)' : undefined, fontWeight: spendFilter === id ? 600 : undefined }}
+                    onClick={() => { setSpendFilter(id); setSpendOpen(false) }}
+                  >
+                    <span style={{ ...s.dropRowLabel, color: spendFilter === id ? 'var(--accent)' : undefined }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Amount range */}
         <div style={s.amountWrap}>
@@ -195,7 +238,7 @@ export function FilterBar() {
                 <button
                   key={p.label}
                   style={{ ...s.preset, ...(isActive ? s.presetActive : {}) }}
-                  onClick={() => updateFilters({ amountMin: p.min, amountMax: p.max })}
+                  onClick={() => updateFilters(isActive ? { amountMin: 0, amountMax: maxAmount } : { amountMin: p.min, amountMax: p.max })}
                 >
                   {p.label}
                 </button>
@@ -203,6 +246,19 @@ export function FilterBar() {
             })}
           </div>
         </div>
+
+        {showNote && (
+          <span style={s.note}>
+            מציג {filteredTransactions.length} מתוך {allTransactions.length} עסקאות
+          </span>
+        )}
+        {spendFilter && spendFilter !== 'all' && recurringTotal !== undefined && variableTotal !== undefined && spendTotal !== undefined && (
+          <span style={{ fontSize: 11, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>
+            קבועות: ₪{recurringTotal.toLocaleString('he-IL', { maximumFractionDigits: 0 })} ({spendTotal > 0 ? Math.round(recurringTotal / spendTotal * 100) : 0}%)
+            {' | '}
+            משתנות: ₪{variableTotal.toLocaleString('he-IL', { maximumFractionDigits: 0 })} ({spendTotal > 0 ? Math.round(variableTotal / spendTotal * 100) : 0}%)
+          </span>
+        )}
 
         {/* Reset */}
         <button
@@ -216,13 +272,6 @@ export function FilterBar() {
           )}
         </button>
       </div>
-
-      {/* Active filter note */}
-      {showNote && (
-        <p style={s.note}>
-          מציג {filteredTransactions.length} מתוך {allTransactions.length} עסקאות
-        </p>
-      )}
     </div>
   )
 }
@@ -403,5 +452,6 @@ const s: Record<string, React.CSSProperties> = {
     color: 'var(--accent)',
     fontWeight: 500,
     direction: 'rtl',
+    whiteSpace: 'nowrap',
   },
 }
