@@ -10,7 +10,7 @@ interface Props {
   onDelete: () => void
   onUpdateAmount: (amount: number) => void
   onUpdateYield: (field: 'monthly' | 'ytd' | 'twelveMonth' | 'threeYear', value: number | null) => void
-  onRefreshYields?: (data: { yields: SavingsAccount['yields']; managementFee: number | null; yieldHistory: SavingsAccount['yieldHistory'] }) => void
+  onRefreshYields?: (data: { yields: SavingsAccount['yields']; yieldHistory: SavingsAccount['yieldHistory'] }) => void
 }
 
 function fmt(n: number) {
@@ -98,7 +98,6 @@ export function SavingsFundCard({ account, inflation, onEdit, onDelete, onUpdate
             threeYear: data.yields.threeYear,
             lastYieldUpdate: now,
           },
-          managementFee: data.yields.managementFee,
           yieldHistory: data.history,
         })
       }

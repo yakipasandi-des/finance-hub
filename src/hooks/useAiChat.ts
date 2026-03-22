@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import Anthropic from '@anthropic-ai/sdk'
-import type { AiResponse, AiBlock, ChatMessage } from '../types'
+import type { AiResponse, AiBlock, ChatMessage, SavingsAccount, InflationData } from '../types'
 import type { Category } from '../categories'
 import type { Filters } from '../context/FilterContext'
 import type { Transaction } from '../types'
@@ -14,6 +14,10 @@ interface UseAiChatInput {
   budgets: Record<string, number>
   recurringMerchants: Set<string>
   filters: Filters
+  currentTab?: string
+  savingsAccounts?: SavingsAccount[]
+  savingsGoal?: number
+  inflation?: InflationData
 }
 
 const SYSTEM_PROMPT_SUFFIX = `
@@ -33,7 +37,7 @@ const SYSTEM_PROMPT_SUFFIX = `
 - text: טקסט תשובה בעברית. השתמש ב-markdown להדגשות.
 - table: טבלת נתונים. headers = כותרות עמודות, rows = שורות נתונים.
 - action/filter: כפתור שמסנן את הדשבורד. payload יכול לכלול months (מערך "YYYY-MM"), categories (מערך מזהי קטגוריות), amountMin, amountMax.
-- action/navigate: כפתור שמנווט ללשונית. tab אחד מ: insights, cashflow, mapping, transactions.
+- action/navigate: כפתור שמנווט ללשונית. tab אחד מ: insights, savings, cashflow, mapping, transactions.
 
 כללים:
 - תמיד החזר לפחות בלוק text אחד.

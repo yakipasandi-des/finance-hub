@@ -1,4 +1,4 @@
-import type { Transaction } from '../types'
+import type { Transaction, SavingsAccount, InflationData } from '../types'
 import type { Category } from '../categories'
 import type { Filters } from '../context/FilterContext'
 
@@ -10,6 +10,10 @@ interface SnapshotInput {
   budgets: Record<string, number>
   recurringMerchants: Set<string>
   filters: Filters
+  currentTab?: string
+  savingsAccounts?: SavingsAccount[]
+  savingsGoal?: number
+  inflation?: InflationData
 }
 
 const HEBREW_MONTHS = [
@@ -138,6 +142,39 @@ export function buildDataSnapshot(input: SnapshotInput): string {
     const d = t.date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
     const catName = catMap.get(map[t.merchant])?.name ?? ''
     lines.push(`${d} | ${t.merchant} | ${fmt(Math.round(t.amount))}${catName ? ` | ${catName}` : ''}`)
+  }
+
+  // --- Current tab ---
+  if (input.currentTab) {
+    lines.push('')
+    lines.push(`## לשונית נוכחית: ${input.currentTab}`)
+  }
+
+  // --- Savings ---
+  const accts = input.savingsAccounts ?? []
+  if (accts.length > 0) {
+    lines.push('')
+    lines.push('## חסכונות')
+    const totalSavings = accts.reduce((s, a) => s + a.currentAmount, 0)
+    lines.push(`סה"כ חסכונות: ${fmt(totalSavings)}`)
+    if (input.savingsGoal && input.savingsGoal > 0) {
+      const progress = Math.min((totalSavings / input.savingsGoal) * 100, 100)
+      lines.push(`יעד FI: ${fmt(input.savingsGoal)} (${Math.round(progress)}%)`)
+    }
+    if (input.inflation) {
+      lines.push(`אינפלציה שנתית: ${input.inflation.annual}%`)
+    }
+    lines.push('')
+    for (const a of accts) {
+      const parts = [a.planName || a.name]
+      if (a.provider) parts.push(`ספק: ${a.provider}`)
+      parts.push(`סכום: ${fmt(a.currentAmount)}`)
+      if (a.yields.ytd != null) parts.push(`תשואה מתחילת שנה: ${a.yields.ytd}%`)
+      if (a.yields.twelveMonth != null) parts.push(`תשואה 12 חודשים: ${a.yields.twelveMonth}%`)
+      if (a.yields.threeYear != null) parts.push(`תשואה 3 שנים: ${a.yields.threeYear}%`)
+      if (a.managementFee != null) parts.push(`דמי ניהול: ${a.managementFee}%`)
+      lines.push(`- ${parts.join(' | ')}`)
+    }
   }
 
   // Suppress unused variable warning — allTransactions is available for callers

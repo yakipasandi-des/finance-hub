@@ -4,7 +4,7 @@ import { Sparkles, X, Send } from 'lucide-react'
 import { useAiChat } from '../hooks/useAiChat'
 import { useFilters } from '../context/FilterContext'
 import { useCategories } from '../context/CategoriesContext'
-import type { Transaction, AiBlock } from '../types'
+import type { Transaction, AiBlock, SavingsAccount, InflationData } from '../types'
 
 interface ChatWidgetProps {
   hasData: boolean
@@ -13,12 +13,17 @@ interface ChatWidgetProps {
   map: Record<string, string>
   budgets: Record<string, number>
   recurringMerchants: Set<string>
+  currentTab?: string
+  savingsAccounts?: SavingsAccount[]
+  savingsGoal?: number
+  inflation?: InflationData
   onNavigate: (tab: string) => void
   onApplyFilter: (filter: { months?: string[]; categories?: string[]; amountMin?: number; amountMax?: number }) => void
 }
 
 export function ChatWidget({
   hasData, allTransactions, filteredTransactions, map, budgets, recurringMerchants,
+  currentTab, savingsAccounts, savingsGoal, inflation,
   onNavigate, onApplyFilter,
 }: ChatWidgetProps) {
   const [open, setOpen] = useState(false)
@@ -32,6 +37,7 @@ export function ChatWidget({
 
   const { messages, isLoading, sendMessage, clearMessages } = useAiChat({
     allTransactions, filteredTransactions, map, categories, budgets, recurringMerchants, filters,
+    currentTab, savingsAccounts, savingsGoal, inflation,
   })
 
   // Re-check API key on open

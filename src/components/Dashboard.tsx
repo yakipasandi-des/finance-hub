@@ -194,7 +194,6 @@ function DashboardContent({
           const now = new Date().toISOString().slice(0, 10)
           updateAccount(acct.id, {
             yields: { monthly: data.yields.monthly, ytd: data.yields.ytd, twelveMonth: data.yields.twelveMonth, threeYear: data.yields.threeYear, lastYieldUpdate: now },
-            managementFee: data.yields.managementFee,
             yieldHistory: data.history,
           })
           count++
@@ -1293,7 +1292,7 @@ function DashboardContent({
                           }
                           updateAccount(acct.id, updates)
                         }}
-                        onRefreshYields={(data) => updateAccount(acct.id, { yields: data.yields, managementFee: data.managementFee, yieldHistory: data.yieldHistory })}
+                        onRefreshYields={(data) => updateAccount(acct.id, { yields: data.yields, yieldHistory: data.yieldHistory })}
                       />
                     </div>
                   )
@@ -1340,6 +1339,10 @@ function DashboardContent({
           map={map}
           budgets={budgets}
           recurringMerchants={recurringMerchants}
+          currentTab={tab}
+          savingsAccounts={accounts}
+          savingsGoal={savingsGoal}
+          inflation={inflation}
           onNavigate={(t) => setTab(t as Tab)}
           onApplyFilter={(f) => updateFilters(f)}
         />
