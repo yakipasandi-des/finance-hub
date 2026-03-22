@@ -120,6 +120,7 @@ export function ManualEntriesCard({ entries, onAdd, onUpdate, onDelete, filter }
               style={st.catSelect}
               value={draft.category}
               onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === 'Escape') cancelEdit(entry.id, isNew) }}
             >
               <option value="">ללא קטגוריה</option>
               {buildCategoryTree(categories).map((node) =>

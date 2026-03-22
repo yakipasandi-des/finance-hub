@@ -163,7 +163,7 @@ function BlockRenderer({ blocks, onAction }: { blocks: AiBlock[]; onAction: (b: 
 // --- Styles ---
 const s: Record<string, React.CSSProperties> = {
   fab: { position: 'fixed', bottom: 24, left: 24, width: 52, height: 52, borderRadius: '50%', background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, boxShadow: '0 4px 16px rgba(0,0,0,0.18)', transition: 'transform 0.15s ease' },
-  panel: { position: 'fixed', bottom: 24, left: 24, width: 400, height: 500, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 16, display: 'flex', flexDirection: 'column', zIndex: 1000, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', overflow: 'hidden' },
+  panel: { position: 'fixed', bottom: 24, left: 24, width: 500, height: 750, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 16, display: 'flex', flexDirection: 'column', zIndex: 1000, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', overflow: 'hidden' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--border)', direction: 'rtl' },
   headerTitle: { fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' },
   closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', alignItems: 'center' },

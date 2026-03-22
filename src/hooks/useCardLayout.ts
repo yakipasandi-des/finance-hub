@@ -118,9 +118,27 @@ export function useCardLayout(storageKey: string, defaults: CardLayout[]) {
     setDropTarget(null)
   }, [storageKey])
 
+  /** Sync layout with a dynamic set of card IDs — keeps order/spans for known cards, appends new ones, removes stale ones. */
+  const syncLayout = useCallback((desired: CardLayout[]) => {
+    setLayout((prev) => {
+      const desiredIds = new Set(desired.map((d) => d.id))
+      const prevIds = new Set(prev.map((p) => p.id))
+      // Nothing changed
+      if (desiredIds.size === prevIds.size && [...desiredIds].every((id) => prevIds.has(id))) return prev
+      // Keep order/spans for existing cards, drop removed, append new
+      const kept = prev.filter((p) => desiredIds.has(p.id))
+      for (const d of desired) {
+        if (!kept.some((k) => k.id === d.id)) kept.push(d)
+      }
+      localStorage.setItem(storageKey, JSON.stringify(kept))
+      return kept
+    })
+  }, [storageKey])
+
   return {
     layout,
     updateSpan,
+    syncLayout,
     draggedCard,
     dropTarget,
     handleDragStart,

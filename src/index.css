@@ -136,6 +136,34 @@ body, body * {
   cursor: pointer;
 }
 
+/* Secondary / outline button hover */
+.btn-secondary {
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--accent-fill) !important;
+}
+.btn-secondary:active:not(:disabled) {
+  opacity: 0.75;
+}
+
+/* Ghost button hover (no border, muted text) */
+.btn-ghost {
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.btn-ghost:hover:not(:disabled) {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+.btn-ghost:active:not(:disabled) {
+  opacity: 0.75;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 @keyframes chatDotPulse {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
   40% { opacity: 1; transform: scale(1); }

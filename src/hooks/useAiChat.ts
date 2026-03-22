@@ -67,6 +67,7 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Anthropic.RateLimitError) return 'יותר מדי בקשות. נסה שוב בעוד דקה.'
   if (error instanceof Anthropic.APIError) return `שגיאת API: ${error.message}`
   if (error instanceof Error && error.message.includes('fetch')) return 'אין חיבור לשרת. בדוק את החיבור לאינטרנט.'
+  console.error('AI Chat error:', error)
   return 'שגיאה לא צפויה. נסה שוב.'
 }
 
@@ -100,7 +101,7 @@ export function useAiChat(input: UseAiChatInput) {
     setIsLoading(true)
 
     try {
-      const client = new Anthropic({ apiKey, baseURL: '/anthropic', dangerouslyAllowBrowser: true })
+      const client = new Anthropic({ apiKey, baseURL: `${window.location.origin}/anthropic`, dangerouslyAllowBrowser: true })
 
       const snapshot = buildDataSnapshot(inputRef.current)
 

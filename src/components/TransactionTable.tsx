@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { CategoryChip } from './CategoryChip'
 import { useFilters } from '../context/FilterContext'
+import { useColumnResize } from '../hooks/useColumnResize'
+import { ResizeColHandle } from './ResizeColHandle'
 
 interface TransactionTableProps {
   map: Record<string, string>
@@ -17,23 +19,28 @@ function formatAmount(n: number): string {
 export function TransactionTable({ map, setMapping, recurringMerchants, toggleRecurring }: TransactionTableProps) {
   const { filteredTransactions } = useFilters()
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
+  const colResize = useColumnResize('finance-hub-tx-col-widths', [90, 180, 140, 120, 50, 90])
   const sorted = [...filteredTransactions].sort((a, b) =>
     dateSort === 'desc' ? b.date.getTime() - a.date.getTime() : a.date.getTime() - b.date.getTime()
   )
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={styles.table}>
+      <table style={{ ...styles.table, tableLayout: 'fixed' }}>
         <thead>
           <tr>
             <th
-              style={styles.thSortable}
+              style={{ ...styles.thSortable, ...colResize.thStyle(0) }}
               onClick={() => setDateSort(dateSort === 'desc' ? 'asc' : 'desc')}
             >
               תאריך {dateSort === 'desc' ? '▼' : '▲'}
+              <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => { e.stopPropagation(); colResize.onMouseDown(0, e) }} />
             </th>
-            {['בית עסק', 'קטגוריה', 'פירוט', 'קבוע', 'סכום'].map((h) => (
-              <th key={h} style={styles.th}>{h}</th>
+            {['בית עסק', 'קטגוריה', 'פירוט', 'קבוע', 'סכום'].map((h, i) => (
+              <th key={h} style={{ ...styles.th, ...colResize.thStyle(i + 1) }}>
+                {h}
+                <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(i + 1, e)} />
+              </th>
             ))}
           </tr>
         </thead>
@@ -138,6 +145,9 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 12px',
     color: 'var(--text-primary)',
     verticalAlign: 'middle',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   rowEven: { background: 'transparent' },
   rowOdd: { background: 'var(--bg-primary)' },

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Trash2, Check, X, RotateCcw } from 'lucide-react'
 import type { BankEntry } from '../types'
+import { useColumnResize } from '../hooks/useColumnResize'
+import { ResizeColHandle } from './ResizeColHandle'
 
 interface CashFlowTimelineProps {
   entries: BankEntry[]
@@ -78,6 +80,7 @@ export function CashFlowTimeline({
   onUpdateEntry,
   onDeleteEntry,
 }: CashFlowTimelineProps) {
+  const colResize = useColumnResize('finance-hub-cf-col-widths', [100, 70, 100, 140, 50, 90, 90, 90, 60])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<Partial<BankEntry>>({})
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
@@ -123,6 +126,10 @@ export function CashFlowTimeline({
     setEditDraft({})
   }
 
+  function handleEditKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') cancelEdit()
+  }
+
   // Sort for display
   const displayRows = dateSort === 'desc' ? [...rows].reverse() : rows
   let lastMonth = ''
@@ -130,23 +137,31 @@ export function CashFlowTimeline({
   return (
     <div style={s.wrapper}>
       <div style={s.tableScroll}>
-        <table style={s.table}>
+        <table style={{ ...s.table, tableLayout: 'fixed' }}>
           <thead>
             <tr>
               <th
-                style={s.thSortable}
+                style={{ ...s.thSortable, ...colResize.thStyle(0) }}
                 onClick={() => setDateSort(dateSort === 'desc' ? 'asc' : 'desc')}
               >
                 תאריך {dateSort === 'desc' ? '▼' : '▲'}
+                <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => { e.stopPropagation(); colResize.onMouseDown(0, e) }} />
               </th>
-              <th style={s.th}>סטטוס</th>
-              <th style={s.th}>סוג</th>
-              <th style={s.th}>שם</th>
-              <th style={s.th}>קבוע</th>
-              <th style={{ ...s.th, textAlign: 'left' }}>תשלום</th>
-              <th style={{ ...s.th, textAlign: 'left' }}>תקבול</th>
-              <th style={{ ...s.th, textAlign: 'left' }}>מצטבר</th>
-              <th style={s.th}></th>
+              {['סטטוס', 'סוג', 'שם', 'קבוע'].map((h, i) => (
+                <th key={h} style={{ ...s.th, ...colResize.thStyle(i + 1) }}>
+                  {h}
+                  <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(i + 1, e)} />
+                </th>
+              ))}
+              {['תשלום', 'תקבול', 'מצטבר'].map((h, i) => (
+                <th key={h} style={{ ...s.th, textAlign: 'left', ...colResize.thStyle(i + 5) }}>
+                  {h}
+                  <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(i + 5, e)} />
+                </th>
+              ))}
+              <th style={{ ...s.th, ...colResize.thStyle(8) }}>
+                <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(8, e)} />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -183,7 +198,7 @@ export function CashFlowTimeline({
                         value={editDraft.date ? formatDateInput(editDraft.date) : ''}
                         onChange={(e) => setEditDraft({ ...editDraft, date: new Date(e.target.value) })}
                         style={s.editInput}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()} onKeyDown={handleEditKeyDown}
                       />
                     ) : (
                       entry.date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
@@ -195,7 +210,7 @@ export function CashFlowTimeline({
                         value={editDraft.status ?? entry.status}
                         onChange={(e) => setEditDraft({ ...editDraft, status: e.target.value as 'actual' | 'expected' })}
                         style={s.editInput}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()} onKeyDown={handleEditKeyDown}
                       >
                         <option value="actual">בפועל</option>
                         <option value="expected">צפוי</option>
@@ -216,7 +231,7 @@ export function CashFlowTimeline({
                         onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })}
                         style={s.editInput}
                         placeholder="סוג..."
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()} onKeyDown={handleEditKeyDown}
                       />
                     ) : (
                       <span style={s.category}>{entry.category}</span>
@@ -229,7 +244,7 @@ export function CashFlowTimeline({
                         onChange={(e) => setEditDraft({ ...editDraft, vendor: e.target.value })}
                         style={s.editInput}
                         placeholder="שם..."
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()} onKeyDown={handleEditKeyDown}
                       />
                     ) : (
                       entry.vendor
@@ -260,7 +275,7 @@ export function CashFlowTimeline({
                         value={editDraft.payment ?? 0}
                         onChange={(e) => setEditDraft({ ...editDraft, payment: parseFloat(e.target.value) || 0 })}
                         style={{ ...s.editInput, width: 80 }}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()} onKeyDown={handleEditKeyDown}
                       />
                     ) : (
                       entry.payment > 0 ? fmt(entry.payment) : ''
@@ -273,7 +288,7 @@ export function CashFlowTimeline({
                         value={editDraft.receipt ?? 0}
                         onChange={(e) => setEditDraft({ ...editDraft, receipt: parseFloat(e.target.value) || 0 })}
                         style={{ ...s.editInput, width: 80 }}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()} onKeyDown={handleEditKeyDown}
                       />
                     ) : (
                       entry.receipt > 0 ? fmt(entry.receipt) : ''
@@ -284,7 +299,7 @@ export function CashFlowTimeline({
                   </td>
                   <td style={{ ...s.td, textAlign: 'center' }}>
                     {isEditing ? (
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()} onKeyDown={handleEditKeyDown}>
                         <button style={s.iconBtn} onClick={saveEdit} title="שמור"><Check size={14} color="var(--green)" /></button>
                         <button style={s.iconBtn} onClick={cancelEdit} title="ביטול"><X size={14} color="var(--red)" /></button>
                         <button style={s.iconBtn} onClick={() => { onDeleteEntry(entry.id); setEditingId(null) }} title="מחק"><Trash2 size={14} /></button>
@@ -353,6 +368,8 @@ const s: Record<string, React.CSSProperties> = {
     borderBottom: '1px solid var(--border)',
     whiteSpace: 'nowrap',
     color: 'var(--text-primary)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   monthSep: {
     padding: '10px 12px 6px',

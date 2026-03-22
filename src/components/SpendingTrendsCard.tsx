@@ -16,7 +16,6 @@ function fmt(n: number) {
 }
 
 export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsProps) {
-  const [smoothed, setSmoothed] = useState(false)
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set())
   const [hoveredCat, setHoveredCat] = useState<string | null>(null)
 
@@ -32,12 +31,8 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
     return [...categories].sort((a, b) => (totals[b.id] ?? 0) - (totals[a.id] ?? 0))
   }, [categories, monthlyData])
 
-  // On first render, hide categories beyond top 5
-  const defaultHidden = useMemo(() => {
-    const set = new Set<string>()
-    rankedCats.forEach((cat, i) => { if (i >= 5) set.add(cat.id) })
-    return set
-  }, [rankedCats])
+  // All categories visible by default
+  const defaultHidden = useMemo(() => new Set<string>(), [])
 
   // Use defaultHidden merged with user toggles
   const [userToggled, setUserToggled] = useState<Set<string>>(new Set())
@@ -70,43 +65,34 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
     })
   }
 
-  // Compute display data (raw or rolling average)
-  const displayData = useMemo(() => {
-    if (!smoothed) return monthlyData
-    return monthlyData.map((row, i) => {
-      const entry: Record<string, number | string> = { month: row.month }
-      for (const cat of categories) {
-        const vals: number[] = []
-        for (let j = Math.max(0, i - 2); j <= i; j++) {
-          const v = monthlyData[j][cat.id]
-          if (typeof v === 'number') vals.push(v)
-        }
-        if (vals.length > 0) {
-          entry[cat.id] = Math.round(vals.reduce((s, v) => s + v, 0) / vals.length)
-        }
-      }
-      return entry
-    })
-  }, [monthlyData, categories, smoothed])
-
-  // Top movers: compare last two months
-  const topMovers = useMemo(() => {
-    if (monthlyData.length < 2) return []
+  // Per-category trend data (last vs previous month)
+  const catTrends = useMemo(() => {
+    if (monthlyData.length < 2) return {} as Record<string, { change: number; pctChange: number; current: number; previous: number }>
     const last = monthlyData[monthlyData.length - 1]
     const prev = monthlyData[monthlyData.length - 2]
-    const movers: { cat: typeof categories[0]; change: number; pctChange: number; current: number; previous: number }[] = []
+    const map: Record<string, { change: number; pctChange: number; current: number; previous: number }> = {}
     for (const cat of categories) {
       const current = typeof last[cat.id] === 'number' ? last[cat.id] as number : 0
       const previous = typeof prev[cat.id] === 'number' ? prev[cat.id] as number : 0
       const change = current - previous
       const pctChange = previous > 0 ? (change / previous) * 100 : 0
-      if (change !== 0) {
-        movers.push({ cat, change, pctChange, current, previous })
+      map[cat.id] = { change, pctChange, current, previous }
+    }
+    return map
+  }, [monthlyData, categories])
+
+  // Top movers: compare last two months
+  const topMovers = useMemo(() => {
+    const movers: { cat: typeof categories[0]; change: number; pctChange: number; current: number; previous: number }[] = []
+    for (const cat of categories) {
+      const trend = catTrends[cat.id]
+      if (trend && trend.change !== 0) {
+        movers.push({ cat, ...trend })
       }
     }
     movers.sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
     return movers.slice(0, 3)
-  }, [monthlyData, categories])
+  }, [categories, catTrends])
 
   if (monthlyData.length === 0) {
     return <p style={styles.empty}>אין נתונים להצגת מגמות.</p>
@@ -114,25 +100,9 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
 
   return (
     <div>
-      {/* Toggle buttons */}
-      <div style={styles.toggleRow}>
-        <button
-          style={{ ...styles.toggleBtn, ...(!smoothed ? styles.toggleActive : {}) }}
-          onClick={() => setSmoothed(false)}
-        >
-          ערכים חודשיים
-        </button>
-        <button
-          style={{ ...styles.toggleBtn, ...(smoothed ? styles.toggleActive : {}) }}
-          onClick={() => setSmoothed(true)}
-        >
-          ממוצע 3 חודשים
-        </button>
-      </div>
-
       {/* Line chart */}
       <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={displayData} margin={{ left: 20, right: 8 }}>
+        <LineChart data={monthlyData} margin={{ left: 20, right: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--text-secondary)', fontFamily: 'inherit' }} />
           <YAxis width={55} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : String(v))} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
@@ -153,8 +123,8 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
                 type="monotone"
                 dataKey={cat.id}
                 stroke={cat.color}
-                strokeWidth={hoveredCat === cat.id ? (smoothed ? 4 : 3) : (smoothed ? 3 : 2)}
-                strokeDasharray={smoothed ? undefined : '5 3'}
+                strokeWidth={hoveredCat === cat.id ? 3 : 2}
+                strokeDasharray="5 3"
                 strokeOpacity={dimmed ? 0.15 : 1}
                 dot={{ r: dimmed ? 2 : 3, fill: cat.color, fillOpacity: dimmed ? 0.15 : 1, strokeOpacity: dimmed ? 0.15 : 1 }}
                 activeDot={dimmed ? false : { r: 5 }}
@@ -169,29 +139,54 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
       <div style={styles.legend}>
         {rankedCats.map((cat) => {
           const isHidden = effectiveHidden.has(cat.id)
+          const trend = catTrends[cat.id]
+          const showTrend = hoveredCat === cat.id && !isHidden && trend
           return (
-            <button
-              key={cat.id}
-              style={styles.legendItem}
-              onClick={() => toggleCategory(cat.id)}
-              onMouseEnter={() => { if (!isHidden) setHoveredCat(cat.id) }}
-              onMouseLeave={() => setHoveredCat(null)}
-            >
-              <span style={{
-                width: 10,
-                height: 10,
-                borderRadius: 3,
-                background: isHidden ? 'var(--border)' : cat.color,
-                flexShrink: 0,
-                display: 'inline-block',
-              }} />
-              <span style={{
-                color: isHidden ? 'var(--text-muted)' : 'var(--text-secondary)',
-                textDecoration: isHidden ? 'line-through' : 'none',
-              }}>
-                {cat.name}
-              </span>
-            </button>
+            <div key={cat.id} style={{ position: 'relative', display: 'inline-flex' }}>
+              <button
+                style={styles.legendItem}
+                onClick={() => toggleCategory(cat.id)}
+                onMouseEnter={() => { if (!isHidden) setHoveredCat(cat.id) }}
+                onMouseLeave={() => setHoveredCat(null)}
+              >
+                <span style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 3,
+                  background: isHidden ? 'var(--border)' : cat.color,
+                  flexShrink: 0,
+                  display: 'inline-block',
+                }} />
+                <span style={{
+                  color: isHidden ? 'var(--text-muted)' : 'var(--text-secondary)',
+                  textDecoration: isHidden ? 'line-through' : 'none',
+                }}>
+                  {cat.name}
+                </span>
+              </button>
+              {showTrend && (
+                <div style={styles.trendTooltip}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <CategoryIcon icon={cat.icon} size={14} />
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{cat.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>חודש קודם: {fmt(trend.previous)}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>→</span>
+                    <span style={{ color: 'var(--text-muted)' }}>חודש נוכחי: {fmt(trend.current)}</span>
+                  </div>
+                  {trend.change !== 0 && (
+                    <div style={{ marginTop: 4, fontSize: 13, fontWeight: 600, color: trend.change > 0 ? 'var(--red)' : 'var(--green)' }}>
+                      {trend.change > 0 ? '↑' : '↓'} {fmt(Math.abs(trend.change))}
+                      {trend.pctChange !== 0 && ` (${Math.abs(Math.round(trend.pctChange))}%)`}
+                    </div>
+                  )}
+                  {trend.change === 0 && (
+                    <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>ללא שינוי</div>
+                  )}
+                </div>
+              )}
+            </div>
           )
         })}
       </div>
@@ -231,9 +226,6 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
 
 const styles: Record<string, React.CSSProperties> = {
   empty: { color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: '24px 0', margin: 0 },
-  toggleRow: { display: 'flex', gap: 2, marginBottom: 16, background: 'var(--bg-primary)', borderRadius: 10, padding: 3, width: 'fit-content', direction: 'rtl', border: '1px solid var(--border)' },
-  toggleBtn: { padding: '7px 16px', border: 'none', borderRadius: 8, background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', transition: 'all 0.15s ease', fontWeight: 500 },
-  toggleActive: { background: 'var(--bg-surface)', color: 'var(--text-primary)', fontWeight: 600, boxShadow: 'var(--shadow-sm)' },
   legend: { display: 'flex', flexWrap: 'wrap', gap: '6px 14px', justifyContent: 'center', marginTop: 12, direction: 'rtl' },
   legendItem: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'inherit', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 4 },
   moversSection: { marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', direction: 'rtl' },
@@ -241,4 +233,20 @@ const styles: Record<string, React.CSSProperties> = {
   moversRow: { display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' as const },
   moverItem: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 },
   moverName: { color: 'var(--text-secondary)', fontSize: 13 },
+  trendTooltip: {
+    position: 'absolute',
+    bottom: 'calc(100% + 8px)',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'var(--bg-surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    boxShadow: 'var(--shadow-lg)',
+    padding: '10px 14px',
+    zIndex: 100,
+    whiteSpace: 'nowrap',
+    direction: 'rtl',
+    fontSize: 12,
+    pointerEvents: 'none',
+  } as React.CSSProperties,
 }

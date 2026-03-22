@@ -1,9 +1,38 @@
+export type FundType = 'gemel' | 'hishtalmut' | 'bituach' | 'pensia' | 'polisat' | 'other'
+
 export interface SavingsAccount {
   id: string
-  name: string       // שם החיסכון
-  managedBy: string  // גוף מנהל
-  amount: number     // יתרה נוכחית ב-₪
-  updatedAt: number  // timestamp ms
+  name: string                    // e.g., "קופת גמל להשקעה"
+  provider: string                // e.g., "מור"
+  planName: string                // e.g., "מור גמל להשקעה - מניות"
+  fundType: FundType
+  fundCode: string                // gemelnet/pensianet code, optional
+  fundDataset?: 'gemel' | 'pensia' // which API dataset this fund belongs to
+  currentAmount: number           // ₪
+  lastUpdated: string             // ISO date
+  yields: {
+    monthly: number | null
+    ytd: number | null
+    twelveMonth: number | null
+    threeYear: number | null
+    lastYieldUpdate: string
+  }
+  yieldHistory: { month: string; yield: number }[]
+  managementFee: number | null
+  notes: string
+  color: string
+  sortOrder: number
+
+  // Legacy compat — kept so the old SavingsCard still compiles
+  managedBy: string
+  amount: number
+  updatedAt: number
+}
+
+export interface InflationData {
+  annual: number
+  lastUpdated: string
+  monthlyHistory: { month: string; rate: number }[]
 }
 
 export interface ManualEntry {

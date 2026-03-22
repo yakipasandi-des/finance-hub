@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, Legend, PieChart, Pie, Sector,
 } from 'recharts'
-import { BarChart2, Tag, List, Settings, FilePlus, Wallet, ChevronLeft, Upload, Moon, Sun, PanelRightClose, PanelRightOpen } from 'lucide-react'
+import { BarChart2, Tag, List, Settings, FilePlus, Wallet, ChevronLeft, Upload, Moon, Sun, PanelRightClose, PanelRightOpen, Wand2, PiggyBank, RefreshCw, Loader2 } from 'lucide-react'
 import { Logo } from './Logo'
 import { ChatWidget } from './ChatWidget'
 import type { Transaction, BankEntry } from '../types'
@@ -25,7 +25,9 @@ import { MerchantMapper } from './MerchantMapper'
 import { TransactionTable } from './TransactionTable'
 import { HelpTooltip } from './HelpTooltip'
 import { SettingsTab } from './SettingsTab'
-import { SavingsCard } from './SavingsCard'
+import { SavingsFundCard } from './SavingsFundCard'
+import { SavingsModal } from './SavingsModal'
+import { fetchFullFundData, fundTypeToDataset } from '../utils/gemelnet'
 import { BudgetCard } from './BudgetCard'
 import { CashFlowTimeline } from './CashFlowTimeline'
 import { CreditCardBox } from './CreditCardBox'
@@ -34,14 +36,13 @@ import type { BalancePoint } from './BalanceChart'
 import { SpendingTrendsCard } from './SpendingTrendsCard'
 import { ResizeHandle } from './ResizeHandle'
 
-type Tab = 'insights' | 'mapping' | 'transactions' | 'cashflow' | 'settings'
+type Tab = 'insights' | 'savings' | 'mapping' | 'transactions' | 'cashflow' | 'settings'
 type SpendFilter = 'all' | 'variable' | 'recurring'
 
 const DEFAULT_INSIGHTS_LAYOUT: CardLayout[] = [
   { id: 'categories', colSpan: 2 },
   { id: 'monthly', colSpan: 2 },
   { id: 'trends', colSpan: 2 },
-  { id: 'savings', colSpan: 2 },
   { id: 'budget', colSpan: 4 },
 ]
 
@@ -49,6 +50,10 @@ const DEFAULT_CASHFLOW_LAYOUT: CardLayout[] = [
   { id: 'cf-creditcard', colSpan: 1 },
   { id: 'cf-balancechart', colSpan: 3 },
   { id: 'cf-timeline', colSpan: 4 },
+]
+
+const DEFAULT_SAVINGS_LAYOUT: CardLayout[] = [
+  { id: 'sav-summary', colSpan: 4 },
 ]
 
 const HEBREW_MONTHS = [
@@ -107,7 +112,7 @@ function DashboardContent({
   toggleRecurring: (merchant: string) => void
 }) {
   const { categories } = useCategories()
-  const { accounts, addAccount, updateAccount, deleteAccount, savingsGoal, setSavingsGoal } = useSavings()
+  const { accounts, addAccount, updateAccount, deleteAccount, savingsGoal, setSavingsGoal, inflation, setInflation } = useSavings()
   const { budgets, setBudget, removeBudget } = useBudgets()
   const { entries: manualEntries } = useManualEntries()
   const {
@@ -159,6 +164,7 @@ function DashboardContent({
   const [tab, setTab] = useState<Tab>('insights')
   const [spendFilter, setSpendFilter] = useState<SpendFilter>('all')
   const [budgetAdding, setBudgetAdding] = useState(false)
+  const [budgetSuggestionsOpen, setBudgetSuggestionsOpen] = useState(false)
   const [selectedParent, setSelectedParent] = useState<string | null>(null)
   const [hoveredCatIdx, setHoveredCatIdx] = useState<number | null>(null)
 
@@ -166,11 +172,55 @@ function DashboardContent({
   const [projDateFrom, setProjDateFrom] = useState('')
   const [projDateTo, setProjDateTo] = useState('')
 
+  // --- Savings page state ---
+  const [savModalOpen, setSavModalOpen] = useState(false)
+  const [savEditingAccount, setSavEditingAccount] = useState<import('../types').SavingsAccount | null>(null)
+  const [savEditingGoal, setSavEditingGoal] = useState(false)
+  const [savGoalDraft, setSavGoalDraft] = useState('')
+  const [savEditingInflation, setSavEditingInflation] = useState(false)
+  const [savInflationDraft, setSavInflationDraft] = useState('')
+  const [savRefreshingAll, setSavRefreshingAll] = useState(false)
+
+  async function handleRefreshAllYields() {
+    const withCode = accounts.filter((a) => a.fundCode && !isNaN(parseInt(a.fundCode, 10)))
+    if (withCode.length === 0) return
+    setSavRefreshingAll(true)
+    let count = 0
+    for (const acct of withCode) {
+      try {
+        const ds = acct.fundDataset ?? fundTypeToDataset(acct.fundType) ?? 'gemel'
+        const data = await fetchFullFundData(parseInt(acct.fundCode, 10), ds)
+        if (data) {
+          const now = new Date().toISOString().slice(0, 10)
+          updateAccount(acct.id, {
+            yields: { monthly: data.yields.monthly, ytd: data.yields.ytd, twelveMonth: data.yields.twelveMonth, threeYear: data.yields.threeYear, lastYieldUpdate: now },
+            managementFee: data.yields.managementFee,
+            yieldHistory: data.history,
+          })
+          count++
+        }
+      } catch { /* skip failed */ }
+    }
+    setSavRefreshingAll(false)
+    if (count > 0) alert(`עודכנו ${count} קופות בהצלחה`)
+  }
+
   // --- Layout hooks for insights and cash flow ---
   const insights = useCardLayout('finance-hub-insights-layout', DEFAULT_INSIGHTS_LAYOUT)
   const cashflow = useCardLayout('finance-hub-cashflow-layout', DEFAULT_CASHFLOW_LAYOUT)
+  const savLayout = useCardLayout('finance-hub-savings-layout', DEFAULT_SAVINGS_LAYOUT)
   const insightsGridRef = useRef<HTMLDivElement>(null)
   const cashflowGridRef = useRef<HTMLDivElement>(null)
+  const savGridRef = useRef<HTMLDivElement>(null)
+
+  // Keep savings layout in sync with dynamic account list
+  useEffect(() => {
+    const desired: CardLayout[] = [
+      { id: 'sav-summary', colSpan: 4 },
+      ...accounts.map((a) => ({ id: `sav-fund-${a.id}`, colSpan: 2 as const })),
+    ]
+    savLayout.syncLayout(desired)
+  }, [accounts, savLayout.syncLayout])
 
   // Track which card is hovered (for resize handle visibility)
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
@@ -313,6 +363,7 @@ function DashboardContent({
             {([
               ['insights',     <BarChart2 size={20} strokeWidth={1.75} />, 'תובנות'],
               ['cashflow',     <Wallet size={20} strokeWidth={1.75} />, 'תזרים מזומנים'],
+              ['savings',      <PiggyBank size={20} strokeWidth={1.75} />, 'חסכונות'],
               ['mapping',      <Tag size={20} strokeWidth={1.75} />, 'מיפוי קטגוריות'],
               ['transactions', <List size={20} strokeWidth={1.75} />, 'כל העסקאות'],
               ['settings',     <Settings size={20} strokeWidth={1.75} />, 'הגדרות'],
@@ -614,18 +665,7 @@ function DashboardContent({
                   </div>
                 )
 
-                if (cardId === 'savings') return (
-                  <div key={cardId} style={wrapStyle} {...dragProps}>
-                    {resizeHandles}
-                    <h2 style={s.cardTitle}>
-                      <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
-                      חסכונות
-                      <HelpTooltip text="מעקב אחר חשבונות חיסכון, קופות גמל, קרנות השתלמות ועוד. הוסף חשבונות ועדכן יתרות כדי לראות את התמונה הכוללת" />
-                      <button style={s.addInlineBtn} onClick={addAccount}>+ הוסף חיסכון</button>
-                    </h2>
-                    <SavingsCard accounts={accounts} onUpdate={updateAccount} onDelete={deleteAccount} savingsGoal={savingsGoal} onSetGoal={setSavingsGoal} />
-                  </div>
-                )
+
 
                 if (cardId === 'budget') return (
                   <div key={cardId} style={wrapStyle} {...dragProps}>
@@ -634,9 +674,12 @@ function DashboardContent({
                       <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
                       תקציב חודשי
                       <HelpTooltip text="הגדר תקציב חודשי לכל קטגוריה ועקוב אחר ההוצאות בפועל מול היעד. כולל הוצאות כרטיס אשראי והוצאות ידניות קבועות" />
-                      <button style={s.addInlineBtn} onClick={() => setBudgetAdding(true)}>+ הוסף תקציב</button>
+                      <span style={{ marginRight: 'auto', display: 'flex', gap: 6 }}>
+                        <button className="btn-secondary" style={{ ...s.addInlineBtn, marginRight: 0, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', gap: 4 }} onClick={() => setBudgetSuggestionsOpen(true)}><Wand2 size={13} strokeWidth={2} /> הצעות חכמות</button>
+                        <button style={{ ...s.addInlineBtn, marginRight: 0 }} onClick={() => setBudgetAdding(true)}>+ הוסף תקציב</button>
+                      </span>
                     </h2>
-                    <BudgetCard budgets={budgets} setBudget={setBudget} removeBudget={removeBudget} map={map} manualExpenses={manualExpenses} manualIncome={manualIncome} bankEntries={bankEntries} adding={budgetAdding} setAdding={setBudgetAdding} />
+                    <BudgetCard budgets={budgets} setBudget={setBudget} removeBudget={removeBudget} map={map} manualExpenses={manualExpenses} manualIncome={manualIncome} bankEntries={bankEntries} adding={budgetAdding} setAdding={setBudgetAdding} showSuggestionsModal={budgetSuggestionsOpen} setShowSuggestionsModal={setBudgetSuggestionsOpen} />
                   </div>
                 )
 
@@ -1040,6 +1083,7 @@ function DashboardContent({
                             <Upload size={14} strokeWidth={1.75} /> ייבוא דוח בנק
                           </button>
                           <button
+                            className="btn-secondary"
                             style={s.cfAddRowBtn}
                             onClick={() => addBankEntry({ date: new Date(), source: 'manual', status: 'expected' })}
                           >
@@ -1062,6 +1106,218 @@ function DashboardContent({
                 })}
               </div>
 
+            </>
+          )
+        })()}
+
+        {/* ─ SAVINGS ─ */}
+        {tab === 'savings' && (() => {
+          // Summary calculations
+          const totalSavings = accounts.reduce((s, a) => s + a.currentAmount, 0)
+          const acctsWith12m = accounts.filter((a) => a.yields.twelveMonth != null)
+          const weightedYield = acctsWith12m.length > 0
+            ? acctsWith12m.reduce((s, a) => s + a.currentAmount * a.yields.twelveMonth!, 0) / acctsWith12m.reduce((s, a) => s + a.currentAmount, 0)
+            : null
+          const realYield = weightedYield != null ? weightedYield - inflation.annual : null
+          const fiProgress = savingsGoal > 0 ? Math.min((totalSavings / savingsGoal) * 100, 100) : 0
+          const fiRemaining = savingsGoal > 0 ? savingsGoal - totalSavings : 0
+
+          return (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 4 }}>
+                <button style={s.addInlineBtn} onClick={() => { setSavEditingAccount(null); setSavModalOpen(true) }}>+ הוסף חיסכון</button>
+              </div>
+
+              <div ref={savGridRef} style={{ ...s.insightGrid, gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                {savLayout.layout.map(({ id: savCardId }) => {
+                  const savColSpan = (savLayout.layout.find((c) => c.id === savCardId)?.colSpan ?? 2) as 1 | 2 | 3 | 4
+                  const savIsDragging = savLayout.draggedCard === savCardId
+                  const savIsOver = savLayout.dropTarget === savCardId && savLayout.draggedCard !== savCardId
+                  const savWrapStyle: React.CSSProperties = {
+                    ...s.card,
+                    position: 'relative',
+                    gridColumn: `span ${savColSpan}`,
+                    cursor: 'grab',
+                    opacity: savIsDragging ? 0.5 : 1,
+                    outline: savIsOver ? '2px dashed var(--accent)' : 'none',
+                    outlineOffset: -2,
+                    transition: 'opacity 0.15s, outline 0.15s',
+                  }
+                  const savDragProps = {
+                    draggable: true,
+                    'data-card-wrapper': true,
+                    onDragStart: savLayout.handleDragStart(savCardId),
+                    onDragEnd: savLayout.handleDragEnd,
+                    onDragOver: savLayout.handleDragOver(savCardId),
+                    onDragLeave: savLayout.handleDragLeave,
+                    onDrop: savLayout.handleDrop(savCardId),
+                    onMouseEnter: () => setHoveredCard(savCardId),
+                    onMouseLeave: () => setHoveredCard(null),
+                  }
+                  const savResizeHandles = (
+                    <>
+                      <ResizeHandle side="left" cardId={savCardId} currentSpan={savColSpan} gridRef={savGridRef} onResize={savLayout.updateSpan} visible={hoveredCard === savCardId} />
+                      <ResizeHandle side="right" cardId={savCardId} currentSpan={savColSpan} gridRef={savGridRef} onResize={savLayout.updateSpan} visible={hoveredCard === savCardId} />
+                    </>
+                  )
+
+                  {/* ── Summary card ── */}
+                  if (savCardId === 'sav-summary') return (
+                    <div key={savCardId} style={savWrapStyle} {...savDragProps}>
+                      {savResizeHandles}
+                      <h2 style={s.cardTitle}>
+                        <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                        סיכום חסכונות
+                        <HelpTooltip text="סיכום כלל החסכונות כולל תשואה משוקללת ותשואה ריאלית (אחרי אינפלציה)" />
+                        {accounts.some((a) => a.fundCode) && (
+                          <button
+                            className="btn-secondary"
+                            style={{ marginRight: 'auto', background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', padding: 0 }}
+                            onClick={handleRefreshAllYields}
+                            disabled={savRefreshingAll}
+                          >
+                            {savRefreshingAll ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />}
+                          </button>
+                        )}
+                      </h2>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 16 }}>
+                        <div>
+                          <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>סה״כ חסכונות</div>
+                          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{fmt(totalSavings)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>תשואה משוקללת (12 חודשים)</div>
+                          <div style={{ fontSize: 26, fontWeight: 700, color: weightedYield != null && weightedYield > 0 ? 'var(--green)' : 'var(--text-primary)', letterSpacing: '-0.5px' }}>
+                            {weightedYield != null ? `${weightedYield.toFixed(1)}%` : '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>תשואה ריאלית</div>
+                          <div style={{ fontSize: 26, fontWeight: 700, color: realYield != null ? (realYield > 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-primary)', letterSpacing: '-0.5px' }}>
+                            {realYield != null ? `${realYield.toFixed(1)}%` : '—'}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>אחרי אינפלציה של {inflation.annual.toFixed(1)}%</div>
+                        </div>
+                      </div>
+
+                      {/* FI Progress */}
+                      {savingsGoal > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                          <div style={{ width: '100%', height: 10, background: 'var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', background: totalSavings >= savingsGoal ? 'var(--green)' : 'var(--accent)', borderRadius: 5, transition: 'width 0.4s ease', width: `${fiProgress}%`, ...(totalSavings >= savingsGoal ? { boxShadow: '0 0 10px rgba(13,148,136,0.45)' } : {}) }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)' }}>
+                            <span>{Math.round(fiProgress)}% מיעד {fmt(savingsGoal)}</span>
+                            {fiRemaining > 0 ? <span>נותרו {fmt(fiRemaining)}</span> : <span style={{ color: 'var(--green)', fontWeight: 600 }}>הגעת ליעד!</span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Goal + Inflation inline controls */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                        {savEditingGoal ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>יעד:</span>
+                            <input
+                              style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', background: 'var(--bg-primary)', color: 'var(--text-primary)', width: 100 }}
+                              type="number" value={savGoalDraft} onChange={(e) => setSavGoalDraft(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { setSavingsGoal(parseFloat(savGoalDraft) || 0); setSavEditingGoal(false) } if (e.key === 'Escape') setSavEditingGoal(false) }}
+                              autoFocus placeholder="סכום יעד"
+                            />
+                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)', padding: '2px 4px' }} onClick={() => { setSavingsGoal(parseFloat(savGoalDraft) || 0); setSavEditingGoal(false) }}>✓</button>
+                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)', padding: '2px 4px' }} onClick={() => setSavEditingGoal(false)}>✕</button>
+                          </div>
+                        ) : (
+                          <button
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: 'var(--accent)', padding: 0, textDecoration: 'underline', textDecorationStyle: 'dotted' } as React.CSSProperties}
+                            onClick={() => { setSavGoalDraft(savingsGoal > 0 ? String(savingsGoal) : ''); setSavEditingGoal(true) }}
+                          >
+                            {savingsGoal > 0 ? `יעד: ${fmt(savingsGoal)} · ערוך` : 'הגדר יעד FI'}
+                          </button>
+                        )}
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
+                          {savEditingInflation ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>אינפלציה:</span>
+                              <input
+                                style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', background: 'var(--bg-primary)', color: 'var(--text-primary)', width: 60 }}
+                                type="number" step="0.1" value={savInflationDraft} onChange={(e) => setSavInflationDraft(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { setInflation({ annual: parseFloat(savInflationDraft) || 0, lastUpdated: new Date().toISOString().slice(0, 10) }); setSavEditingInflation(false) } if (e.key === 'Escape') setSavEditingInflation(false) }}
+                                autoFocus
+                              />
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>%</span>
+                              <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)', padding: '2px 4px' }} onClick={() => { setInflation({ annual: parseFloat(savInflationDraft) || 0, lastUpdated: new Date().toISOString().slice(0, 10) }); setSavEditingInflation(false) }}>✓</button>
+                              <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)', padding: '2px 4px' }} onClick={() => setSavEditingInflation(false)}>✕</button>
+                            </div>
+                          ) : (
+                            <button
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: 'var(--accent)', padding: 0, textDecoration: 'underline', textDecorationStyle: 'dotted' } as React.CSSProperties}
+                              onClick={() => { setSavInflationDraft(String(inflation.annual)); setSavEditingInflation(true) }}
+                            >
+                              אינפלציה: {inflation.annual.toFixed(1)}% · ערוך
+                            </button>
+                          )}
+                          <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>מקור: הלשכה המרכזית לסטטיסטיקה — עדכן ידנית</div>
+                        </div>
+                      </div>
+
+                      {accounts.length === 0 && (
+                        <p style={s.empty}>אין חסכונות עדיין — לחץ על "+ הוסף חיסכון" כדי להתחיל</p>
+                      )}
+                    </div>
+                  )
+
+                  {/* ── Fund cards ── */}
+                  const fundId = savCardId.replace('sav-fund-', '')
+                  const acct = accounts.find((a) => a.id === fundId)
+                  if (acct) return (
+                    <div key={savCardId} style={{ ...savWrapStyle, padding: 0, overflow: 'hidden' }} {...savDragProps}>
+                      {savResizeHandles}
+                      <SavingsFundCard
+                        account={acct}
+                        inflation={inflation}
+                        onEdit={() => { setSavEditingAccount(acct); setSavModalOpen(true) }}
+                        onDelete={() => { if (confirm('למחוק את החיסכון?')) deleteAccount(acct.id) }}
+                        onUpdateAmount={(amount) => updateAccount(acct.id, { currentAmount: amount, lastUpdated: new Date().toISOString().slice(0, 10) })}
+                        onUpdateYield={(field, value) => {
+                          const newYields = { ...acct.yields, [field]: value, lastYieldUpdate: new Date().toISOString().slice(0, 10) }
+                          const updates: Partial<import('../types').SavingsAccount> = { yields: newYields }
+                          if (field === 'monthly' && value != null) {
+                            const currentMonth = new Date().toISOString().slice(0, 7)
+                            const alreadyExists = acct.yieldHistory.some((h) => h.month === currentMonth)
+                            if (!alreadyExists && confirm('להוסף להיסטוריה?')) {
+                              updates.yieldHistory = [...acct.yieldHistory, { month: currentMonth, yield: value }]
+                            }
+                          }
+                          updateAccount(acct.id, updates)
+                        }}
+                        onRefreshYields={(data) => updateAccount(acct.id, { yields: data.yields, managementFee: data.managementFee, yieldHistory: data.yieldHistory })}
+                      />
+                    </div>
+                  )
+
+                  return null
+                })}
+              </div>
+
+              {/* Add/Edit Modal */}
+              {savModalOpen && (
+                <SavingsModal
+                  account={savEditingAccount}
+                  onSave={(data) => {
+                    if (savEditingAccount) {
+                      updateAccount(savEditingAccount.id, data)
+                    } else {
+                      addAccount(data)
+                    }
+                    setSavModalOpen(false)
+                    setSavEditingAccount(null)
+                  }}
+                  onClose={() => { setSavModalOpen(false); setSavEditingAccount(null) }}
+                />
+              )}
             </>
           )
         })()}

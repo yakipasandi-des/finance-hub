@@ -54,6 +54,9 @@ export const PALETTE_COLORS = [
   '#7c6fd4', '#5ba08a', '#c49a4a', '#d97090',
   '#9b8bd4', '#6ab3d8', '#cc88d0', '#e8b86d',
   '#e88ab4', '#8e85a8', '#6aab8e', '#d4849a',
+  '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71',
+  '#1abc9c', '#3498db', '#2c3e50', '#8e44ad',
+  '#d35400', '#27ae60', '#2980b9', '#c0392b',
 ]
 
 export const EMOJI_PRESETS = [

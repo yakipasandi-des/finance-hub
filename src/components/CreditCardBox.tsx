@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Trash2, Check, X, CreditCard } from 'lucide-react'
 import type { CreditCardPayment } from '../types'
 import { HelpTooltip } from './HelpTooltip'
+import { useColumnResize } from '../hooks/useColumnResize'
+import { ResizeColHandle } from './ResizeColHandle'
 
 interface CreditCardBoxProps {
   payments: CreditCardPayment[]
@@ -22,6 +24,7 @@ function toInputDate(d: Date): string {
 }
 
 export function CreditCardBox({ payments, onAdd, onUpdate, onDelete }: CreditCardBoxProps) {
+  const colResize = useColumnResize('finance-hub-cc-col-widths', [120, 100, 60])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDate, setEditDate] = useState('')
   const [editAmount, setEditAmount] = useState('')
@@ -70,12 +73,20 @@ export function CreditCardBox({ payments, onAdd, onUpdate, onDelete }: CreditCar
       {sorted.length === 0 ? (
         <p style={s.empty}>אין תשלומים. הוסף את סכום החיוב הקרוב בכרטיס האשראי.</p>
       ) : (
-        <table style={s.table}>
+        <table style={{ ...s.table, tableLayout: 'fixed' }}>
           <thead>
             <tr>
-              <th style={s.th}>תאריך</th>
-              <th style={s.th}>סכום (₪)</th>
-              <th style={{ ...s.th, width: 60 }}></th>
+              <th style={{ ...s.th, ...colResize.thStyle(0) }}>
+                תאריך
+                <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(0, e)} />
+              </th>
+              <th style={{ ...s.th, ...colResize.thStyle(1) }}>
+                סכום (₪)
+                <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(1, e)} />
+              </th>
+              <th style={{ ...s.th, ...colResize.thStyle(2) }}>
+                <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(2, e)} />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -99,6 +110,7 @@ export function CreditCardBox({ payments, onAdd, onUpdate, onDelete }: CreditCar
                         onChange={(e) => setEditDate(e.target.value)}
                         style={s.input}
                         onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => { if (e.key === 'Escape') cancelEdit() }}
                         autoFocus
                       />
                     ) : (

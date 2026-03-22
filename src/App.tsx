@@ -85,6 +85,8 @@ function App() {
     localStorage.removeItem('bankEntries')
     localStorage.removeItem('bankSettings')
     localStorage.removeItem('recurringMerchants')
+    localStorage.removeItem('savings-goal')
+    localStorage.removeItem('inflationData')
     window.location.reload()
   }
 
