@@ -28,6 +28,7 @@ import { SettingsTab } from './SettingsTab'
 import { SavingsFundCard } from './SavingsFundCard'
 import { SavingsModal } from './SavingsModal'
 import { fetchFullFundData, fundTypeToDataset } from '../utils/gemelnet'
+import { fetchInflation } from '../utils/inflation'
 import { BudgetCard } from './BudgetCard'
 import { CashFlowTimeline } from './CashFlowTimeline'
 import { CreditCardBox } from './CreditCardBox'
@@ -180,6 +181,16 @@ function DashboardContent({
   const [savEditingInflation, setSavEditingInflation] = useState(false)
   const [savInflationDraft, setSavInflationDraft] = useState('')
   const [savRefreshingAll, setSavRefreshingAll] = useState(false)
+  const [inflationFetching, setInflationFetching] = useState(false)
+
+  async function handleFetchInflation() {
+    setInflationFetching(true)
+    try {
+      const data = await fetchInflation()
+      setInflation({ annual: data.annual, lastUpdated: data.lastUpdated, monthlyHistory: data.monthlyHistory })
+    } catch { /* silent */ }
+    finally { setInflationFetching(false) }
+  }
 
   async function handleRefreshAllYields() {
     const withCode = accounts.filter((a) => a.fundCode && !isNaN(parseInt(a.fundCode, 10)))
@@ -226,12 +237,6 @@ function DashboardContent({
 
   // --- Summary stats (from filteredTransactions) ---
   const total = filteredTransactions.reduce((s, t) => s + t.amount, 0)
-  const sortedDates = [...filteredTransactions].sort((a, b) => a.date.getTime() - b.date.getTime())
-  const earliest = sortedDates[0]?.date
-  const latest = sortedDates[sortedDates.length - 1]?.date
-
-  const allTotal = allTransactions.reduce((s, t) => s + t.amount, 0)
-
   // --- Insights tab: apply SpendFilter on top of global filter ---
   const insightsTxs =
     spendFilter === 'all'
@@ -340,10 +345,6 @@ function DashboardContent({
     return entry
   })
 
-  const dateRange =
-    earliest && latest
-      ? `${earliest.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })} – ${latest.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
-      : '—'
 
   const sidebarWidth = sidebarCollapsed ? 64 : 220
 
@@ -424,22 +425,6 @@ function DashboardContent({
 
         {/* ── Main content ── */}
         <div style={{ ...s.mainArea, marginRight: sidebarWidth }}>
-          {/* ── Summary bar (insights only) ── */}
-          {tab === 'insights' && <div style={s.summaryBar}>
-        <SCard
-          label="טווח תאריכים"
-          value={dateRange}
-          small
-          tooltip="תאריך העסקה הראשונה והאחרונה בנתונים המסוננים"
-        />
-        <SCard
-          label="סה״כ הוצאות"
-          value={fmt(total)}
-          tooltip="סך כל החיובים בכרטיס האשראי לפי הסינון הנוכחי"
-          note={activeFilterCount > 0 ? `מתוך ${fmt(allTotal)} בסה״כ` : undefined}
-        />
-      </div>}
-
       {/* ── Tab content ── */}
       <div style={s.content}>
 
@@ -1258,7 +1243,19 @@ function DashboardContent({
                               אינפלציה: {inflation.annual.toFixed(1)}% · ערוך
                             </button>
                           )}
-                          <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>מקור: הלשכה המרכזית לסטטיסטיקה — עדכן ידנית</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-faint)' }}>
+                            <span>מקור: הלמ״ס{inflation.lastUpdated ? ` · עודכן ${inflation.lastUpdated}` : ''}</span>
+                            <button
+                              className="btn-ghost"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: 'var(--accent)', fontSize: 11, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                              onClick={handleFetchInflation}
+                              disabled={inflationFetching}
+                              title="עדכן אינפלציה מהלמ״ס"
+                            >
+                              {inflationFetching ? <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={10} />}
+                              עדכן
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -1352,27 +1349,6 @@ function DashboardContent({
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-function SCard({ label, value, small, color, tooltip, note }: {
-  label: string; value: string; small?: boolean; color?: string; tooltip?: string; note?: string
-}) {
-  return (
-    <div style={s.sCard}>
-      <span style={{ ...s.sLabel, display: 'flex', alignItems: 'center', gap: '5px' }}>
-        {label}
-        {tooltip && <HelpTooltip text={tooltip} />}
-      </span>
-      <span style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-        <span style={{ ...s.sValue, fontSize: small ? '14px' : '22px', color: color ?? 'var(--text-primary)' }}>
-          {value}
-        </span>
-        {note && <span style={{ fontSize: '11px', color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>{note}</span>}
-      </span>
-    </div>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
@@ -1394,10 +1370,6 @@ const s: Record<string, React.CSSProperties> = {
   navLabel: { overflow: 'hidden', textOverflow: 'ellipsis' },
   collapseBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 12px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-faint)', cursor: 'pointer', transition: 'all 0.15s ease', fontFamily: 'inherit' },
   mainArea: { flex: 1, display: 'flex', flexDirection: 'column', transition: SIDEBAR_TRANSITION, paddingBottom: 48, minWidth: 0 },
-  summaryBar: { display: 'flex', gap: '16px', padding: '20px 28px', flexWrap: 'wrap', direction: 'rtl' },
-  sCard: { flex: '1 1 140px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)' },
-  sLabel: { fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.01em' },
-  sValue: { fontWeight: 700 },
   content: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px 28px 0' },
   filterRow: { display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', direction: 'rtl' },
   filterGroup: { display: 'flex', gap: '2px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', padding: '3px', border: '1px solid var(--border)' },
