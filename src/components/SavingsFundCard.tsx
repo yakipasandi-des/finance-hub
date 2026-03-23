@@ -175,9 +175,18 @@ export function SavingsFundCard({ account, inflation, onEdit, onDelete, onUpdate
     >
       {/* Header */}
       <div style={s.cardHeader}>
-        <div style={s.planName}>{account.planName || account.name || 'ללא שם'}</div>
-        <div style={s.providerBadge}>
-          <span>{account.provider}</span>
+        <div style={s.planName}>
+          {account.planName || account.name || 'ללא שם'}
+          {account.provider && <span style={s.providerInline}> ({account.provider})</span>}
+        </div>
+        <div style={{ ...s.actionBtns, opacity: hovered ? 1 : 0 }}>
+          {account.fundCode && (
+            <button className="btn-ghost" style={s.actionBtn} onClick={handleRefresh} disabled={refreshing} title="עדכן תשואות">
+              {refreshing ? <Loader2 size={14} strokeWidth={1.75} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} strokeWidth={1.75} />}
+            </button>
+          )}
+          <button className="btn-ghost" style={s.actionBtn} onClick={onEdit} title="ערוך"><Pencil size={14} strokeWidth={1.75} /></button>
+          <button className="btn-ghost" style={{ ...s.actionBtn, color: 'var(--red)' }} onClick={onDelete} title="מחק"><Trash2 size={14} strokeWidth={1.75} /></button>
         </div>
       </div>
 
@@ -307,37 +316,17 @@ export function SavingsFundCard({ account, inflation, onEdit, onDelete, onUpdate
           <span style={{ fontSize: 16, color: 'var(--text-primary)' }}>
             הכסף שלך {realEarnings >= 0 ? 'הרוויח' : 'הפסיד'} ריאלית:
           </span>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-            <span style={{ fontWeight: 700, fontSize: 18, color: realEarnings >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              ~{fmt(Math.abs(Math.round(realEarnings)))}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               ({fmt(currentAmount)} × {fmtPct(netReal)})
+            </span>
+            <span style={{ fontWeight: 700, fontSize: 18, color: realEarnings >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              ~{fmt(Math.abs(Math.round(realEarnings)))}
             </span>
           </div>
         </div>
       )}
 
-      {/* Footer */}
-      <div style={{ ...s.cardFooter, opacity: hovered ? 1 : 0.4 }}>
-        <button className="btn-ghost" style={s.footerBtn} onClick={onEdit}><Pencil size={13} strokeWidth={1.75} /> ערוך</button>
-        <button className="btn-ghost" style={{ ...s.footerBtn, color: 'var(--red)' }} onClick={onDelete}><Trash2 size={13} strokeWidth={1.75} /> מחק</button>
-        {account.fundCode && (
-          <button
-            className="btn-ghost"
-            style={{ ...s.footerBtn, marginRight: 'auto' }}
-            onClick={handleRefresh}
-            disabled={refreshing}
-            title="עדכן תשואות מגמל נט"
-          >
-            {refreshing
-              ? <Loader2 size={13} strokeWidth={1.75} style={{ animation: 'spin 1s linear infinite' }} />
-              : <RefreshCw size={13} strokeWidth={1.75} />
-            }
-            עדכן תשואות
-          </button>
-        )}
-      </div>
     </div>
   )
 }
@@ -346,9 +335,11 @@ const s: Record<string, React.CSSProperties> = {
   card: {
     padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 12,
   },
-  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
-  planName: { fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 },
-  providerBadge: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  planName: { fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, flex: 1, minWidth: 0 },
+  providerInline: { fontWeight: 500, fontSize: 14, color: 'var(--text-muted)' },
+  actionBtns: { display: 'flex', gap: 2, flexShrink: 0, transition: 'opacity 0.2s' },
+  actionBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center' },
   balanceSection: { display: 'flex', flexDirection: 'column', gap: 4 },
   balanceAmount: { fontSize: 34, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' },
   lastUpdated: { fontSize: 12, color: 'var(--text-muted)' },
@@ -362,8 +353,6 @@ const s: Record<string, React.CSSProperties> = {
   realYieldTable: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 15, color: 'var(--text-secondary)' },
   realRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   impactRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderTop: '1px solid var(--border)', paddingTop: 10 },
-  cardFooter: { display: 'flex', gap: 10, borderTop: '1px solid var(--border)', paddingTop: 10, transition: 'opacity 0.2s' },
-  footerBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: 'var(--text-muted)', padding: '4px 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 4 },
   inlineEdit: { display: 'flex', alignItems: 'center', gap: 4 },
   inlineInput: { padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 14, fontFamily: 'inherit', background: 'var(--bg-primary)', color: 'var(--text-primary)', width: 120 },
   inlineBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '2px 4px', color: 'var(--text-muted)' },
