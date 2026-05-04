@@ -185,6 +185,7 @@ function makeBankId(): string {
 export interface BankParseResult {
   entries: BankEntry[]
   startingBalance?: number
+  startingBalanceDate?: string // ISO date of the oldest entry
 }
 
 export function parseBankExcel(buffer: ArrayBuffer): BankParseResult {
@@ -264,8 +265,15 @@ export function parseBankExcel(buffer: ArrayBuffer): BankParseResult {
     startingBalance = oldestBalance + oldestPayment - oldestReceipt
   }
 
-  console.log(`[BankParser] Extracted ${entries.length} bank entries, startingBalance: ${startingBalance}`)
-  return { entries, startingBalance }
+  // Find oldest entry date to anchor the starting balance
+  let startingBalanceDate: string | undefined
+  if (entries.length > 0) {
+    const oldest = entries.reduce((a, b) => a.date < b.date ? a : b)
+    startingBalanceDate = oldest.date.toISOString().slice(0, 10)
+  }
+
+  console.log(`[BankParser] Extracted ${entries.length} bank entries, startingBalance: ${startingBalance}, startingBalanceDate: ${startingBalanceDate}`)
+  return { entries, startingBalance, startingBalanceDate }
 }
 
 // ---------------------------------------------------------------------------

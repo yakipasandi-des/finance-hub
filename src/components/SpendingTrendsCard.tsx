@@ -102,10 +102,10 @@ export function SpendingTrendsCard({ monthlyData, categories }: SpendingTrendsPr
     <div>
       {/* Line chart */}
       <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={monthlyData} margin={{ left: 20, right: 8 }}>
+        <LineChart data={monthlyData} margin={{ left: 40, right: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--text-secondary)', fontFamily: 'inherit' }} />
-          <YAxis width={55} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : String(v))} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+          <YAxis width={60} tickMargin={8} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : String(v))} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
           <Tooltip
             cursor={{ fill: 'rgba(0,0,0,0.04)' }}
             formatter={(v: number, name: string) => {

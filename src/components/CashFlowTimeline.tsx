@@ -31,7 +31,15 @@ function monthKey(d: Date): string {
 }
 
 function generateProjections(entries: BankEntry[], projectionMonths: number): BankEntry[] {
-  const recurring = entries.filter((e) => e.recurring)
+  // Deduplicate recurring entries by vendor — keep only the latest per vendor
+  const allRecurring = entries.filter((e) => e.recurring)
+  const seen = new Set<string>()
+  const sorted = [...allRecurring].sort((a, b) => b.date.getTime() - a.date.getTime())
+  const recurring = sorted.filter((e) => {
+    if (seen.has(e.vendor)) return false
+    seen.add(e.vendor)
+    return true
+  })
   if (recurring.length === 0) return []
 
   const today = new Date()
@@ -92,10 +100,20 @@ export function CashFlowTimeline({
   allEntries.sort((a, b) => a.date.getTime() - b.date.getTime())
 
   // Compute running balance (always oldest-first)
-  let runningBalance = startingBalance
+  // Two separate tracks: actual balance (matches the card) and expected offset
+  // Actual rows show only the actual running total
+  // Expected/projected rows show actual total + accumulated expected offset
+  let actualBalance = startingBalance
+  let expectedOffset = 0
   const rows = allEntries.map((entry) => {
-    runningBalance += entry.receipt - entry.payment
-    return { entry, balance: runningBalance }
+    const isExpected = entry.status === 'expected' || entry.id.startsWith('proj_')
+    if (isExpected) {
+      expectedOffset += entry.receipt - entry.payment
+      return { entry, balance: actualBalance + expectedOffset }
+    } else {
+      actualBalance += entry.receipt - entry.payment
+      return { entry, balance: actualBalance }
+    }
   })
 
   const isProjection = (id: string) => id.startsWith('proj_')
@@ -128,6 +146,12 @@ export function CashFlowTimeline({
 
   function handleEditKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') cancelEdit()
+  }
+
+  // Find the last "בפועל" row — the most recent actual entry
+  let lastActualId: string | null = null
+  for (const { entry } of rows) {
+    if (entry.status === 'actual') lastActualId = entry.id
   }
 
   // Sort for display
@@ -172,6 +196,7 @@ export function CashFlowTimeline({
 
               const isProj = isProjection(entry.id)
               const isEditing = editingId === entry.id
+              const isLastActual = entry.id === lastActualId
 
               return [
                 showMonthSep && (
@@ -186,6 +211,7 @@ export function CashFlowTimeline({
                   style={{
                     ...s.row,
                     ...(isProj ? s.projectedRow : {}),
+                    ...(isLastActual ? s.lastActualRow : {}),
                     ...(isEditing ? s.editingRow : {}),
                     cursor: isProj ? 'default' : 'pointer',
                   }}
@@ -215,14 +241,11 @@ export function CashFlowTimeline({
                         <option value="actual">בפועל</option>
                         <option value="expected">צפוי</option>
                       </select>
-                    ) : (() => {
-                      const effectiveStatus = entry.date <= new Date() ? 'actual' : entry.status
-                      return (
-                        <span style={{ ...s.statusBadge, ...(effectiveStatus === 'actual' ? s.statusActual : s.statusExpected) }}>
-                          {effectiveStatus === 'actual' ? 'בפועל' : 'צפוי'}
-                        </span>
-                      )
-                    })()}
+                    ) : (
+                      <span style={{ ...s.statusBadge, ...(entry.status === 'actual' ? s.statusActual : s.statusExpected) }}>
+                        {entry.status === 'actual' ? 'בפועל' : 'צפוי'}
+                      </span>
+                    )}
                   </td>
                   <td style={s.td}>
                     {isEditing ? (
@@ -359,6 +382,10 @@ const s: Record<string, React.CSSProperties> = {
   projectedRow: {
     opacity: 0.7,
     borderRight: '3px dashed var(--accent)',
+  },
+  lastActualRow: {
+    background: 'rgba(13, 148, 136, 0.10)',
+    borderRight: '3px solid var(--green)',
   },
   editingRow: {
     background: 'var(--accent-fill)',

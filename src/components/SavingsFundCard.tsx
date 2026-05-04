@@ -79,7 +79,7 @@ export function SavingsFundCard({ account, inflation, onEdit, onDelete, onUpdate
   const [hovered, setHovered] = useState(false)
   const [hoveredAmount, setHoveredAmount] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [yieldPeriod, setYieldPeriod] = useState<YieldPeriod>('twelveMonth')
+  const [yieldPeriod, setYieldPeriod] = useState<YieldPeriod>('ytd')
 
   async function handleRefresh() {
     const code = parseInt(account.fundCode, 10)
@@ -112,8 +112,8 @@ export function SavingsFundCard({ account, inflation, onEdit, onDelete, onUpdate
   const inflationForPeriod = (() => {
     if (yieldPeriod === 'monthly') return inflation.annual / 12
     if (yieldPeriod === 'ytd') {
-      const elapsedMonths = new Date().getMonth() // 0-based = months elapsed
-      return elapsedMonths > 0 ? inflation.annual * elapsedMonths / 12 : inflation.annual / 12
+      const elapsedMonths = new Date().getMonth() + 1
+      return inflation.annual * elapsedMonths / 12
     }
     return inflation.annual
   })()
@@ -121,8 +121,8 @@ export function SavingsFundCard({ account, inflation, onEdit, onDelete, onUpdate
     if (managementFee == null) return null
     if (yieldPeriod === 'monthly') return managementFee / 12
     if (yieldPeriod === 'ytd') {
-      const elapsedMonths = new Date().getMonth()
-      return elapsedMonths > 0 ? managementFee * elapsedMonths / 12 : managementFee / 12
+      const elapsedMonths = new Date().getMonth() + 1
+      return managementFee * elapsedMonths / 12
     }
     return managementFee
   })()
@@ -180,11 +180,14 @@ export function SavingsFundCard({ account, inflation, onEdit, onDelete, onUpdate
           {account.provider && <span style={s.providerInline}> ({account.provider})</span>}
         </div>
         <div style={{ ...s.actionBtns, opacity: hovered ? 1 : 0 }}>
-          {account.fundCode && (
+          {account.fundCode && (<>
+            {account.yieldHistory.length > 0 && (
+              <span style={s.dataDate}>{account.yieldHistory[account.yieldHistory.length - 1].month}</span>
+            )}
             <button className="btn-ghost" style={s.actionBtn} onClick={handleRefresh} disabled={refreshing} title="עדכן תשואות">
               {refreshing ? <Loader2 size={14} strokeWidth={1.75} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} strokeWidth={1.75} />}
             </button>
-          )}
+          </>)}
           <button className="btn-ghost" style={s.actionBtn} onClick={onEdit} title="ערוך"><Pencil size={14} strokeWidth={1.75} /></button>
           <button className="btn-ghost" style={{ ...s.actionBtn, color: 'var(--red)' }} onClick={onDelete} title="מחק"><Trash2 size={14} strokeWidth={1.75} /></button>
         </div>
@@ -340,6 +343,7 @@ const s: Record<string, React.CSSProperties> = {
   providerInline: { fontWeight: 500, fontSize: 14, color: 'var(--text-muted)' },
   actionBtns: { display: 'flex', gap: 2, flexShrink: 0, transition: 'opacity 0.2s' },
   actionBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center' },
+  dataDate: { fontSize: 10, color: 'var(--text-faint)', fontWeight: 500, whiteSpace: 'nowrap' as const, direction: 'ltr' as const },
   balanceSection: { display: 'flex', flexDirection: 'column', gap: 4 },
   balanceAmount: { fontSize: 34, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' },
   lastUpdated: { fontSize: 12, color: 'var(--text-muted)' },

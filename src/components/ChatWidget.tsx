@@ -35,7 +35,7 @@ export function ChatWidget({
   const { filters } = useFilters()
   const { categories } = useCategories()
 
-  const { messages, isLoading, sendMessage, clearMessages } = useAiChat({
+  const { messages, isLoading, sendMessage } = useAiChat({
     allTransactions, filteredTransactions, map, categories, budgets, recurringMerchants, filters,
     currentTab, savingsAccounts, savingsGoal, inflation,
   })
@@ -55,7 +55,6 @@ export function ChatWidget({
 
   const handleClose = () => {
     setOpen(false)
-    clearMessages()
   }
 
   const handleSend = () => {

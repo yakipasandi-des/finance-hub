@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, Legend, PieChart, Pie, Sector,
 } from 'recharts'
-import { BarChart2, Tag, List, Settings, FilePlus, Wallet, ChevronLeft, Upload, Moon, Sun, PanelRightClose, PanelRightOpen, Wand2, PiggyBank, RefreshCw, Loader2 } from 'lucide-react'
+import { BarChart2, Tag, List, Settings, FilePlus, Wallet, ChevronLeft, Upload, Moon, Sun, PanelRightClose, PanelRightOpen, Wand2, PiggyBank, RefreshCw, Loader2, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { Logo } from './Logo'
 import { ChatWidget } from './ChatWidget'
 import type { Transaction, BankEntry } from '../types'
@@ -35,6 +35,7 @@ import { CreditCardBox } from './CreditCardBox'
 import { BalanceChart } from './BalanceChart'
 import type { BalancePoint } from './BalanceChart'
 import { SpendingTrendsCard } from './SpendingTrendsCard'
+import { TopExpensesCard } from './TopExpensesCard'
 import { ResizeHandle } from './ResizeHandle'
 
 type Tab = 'insights' | 'savings' | 'mapping' | 'transactions' | 'cashflow' | 'settings'
@@ -44,6 +45,7 @@ const DEFAULT_INSIGHTS_LAYOUT: CardLayout[] = [
   { id: 'categories', colSpan: 2 },
   { id: 'monthly', colSpan: 2 },
   { id: 'trends', colSpan: 2 },
+  { id: 'top-expenses', colSpan: 2 },
   { id: 'budget', colSpan: 4 },
 ]
 
@@ -123,6 +125,7 @@ function DashboardContent({
     updateEntry: updateBankEntry,
     deleteEntry: deleteBankEntry,
     importEntries: importBankEntries,
+    clearEntries: clearBankEntries,
     updateSettings: updateBankSettings,
   } = useBankEntries()
   const {
@@ -160,6 +163,7 @@ function DashboardContent({
     allTransactions,
     activeFilterCount,
     updateFilters,
+    filters,
   } = useFilters()
 
   const [tab, setTab] = useState<Tab>('insights')
@@ -600,10 +604,10 @@ function DashboardContent({
                       <p style={s.empty}>אין נתונים לאחר סינון.</p>
                     ) : (
                       <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={monthChartData} margin={{ left: 20, right: 8 }}>
+                        <BarChart data={monthChartData} margin={{ left: 40, right: 8 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                           <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--text-secondary)', fontFamily: 'inherit' }} />
-                          <YAxis width={55} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : v)} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+                          <YAxis width={60} tickMargin={8} tickFormatter={(v: number) => '₪' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : v)} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
                           <Tooltip
                             cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                             formatter={(v: number, name: string) => {
@@ -649,7 +653,24 @@ function DashboardContent({
                   </div>
                 )
 
-
+                if (cardId === 'top-expenses') return (
+                  <div key={cardId} style={wrapStyle} {...dragProps}>
+                    {resizeHandles}
+                    <h2 style={s.cardTitle}>
+                      <span style={s.dragHandle} title="גרור לשינוי סדר">⠿</span>
+                      ההוצאות הגדולות
+                      <HelpTooltip text="ההוצאות הגדולות ביותר בתקופה הנבחרת, מדורגות לפי סכום. ניתן ללחוץ על שורה לסינון לפי קטגוריה" />
+                    </h2>
+                    <TopExpensesCard
+                      transactions={insightsTxs}
+                      allTransactions={allTransactions}
+                      map={map}
+                      budgets={budgets}
+                      recurringMerchants={recurringMerchants}
+                      selectedMonths={filters.months}
+                    />
+                  </div>
+                )
 
                 if (cardId === 'budget') return (
                   <div key={cardId} style={wrapStyle} {...dragProps}>
@@ -704,22 +725,35 @@ function DashboardContent({
         {/* ─ CASH FLOW ─ */}
         {tab === 'cashflow' && (() => {
           // Convert credit card payments to BankEntry format
-          const ccAsBankEntries: BankEntry[] = ccPayments.map((cc) => ({
-            id: `cc_${cc.id}`,
-            date: cc.date,
-            status: 'expected' as const,
-            category: 'כרטיס אשראי',
-            vendor: 'כרטיס אשראי',
-            payment: cc.amount,
-            receipt: 0,
-            recurring: false,
-            source: 'manual' as const,
-          }))
+          // Auto-advance: if the charge date has passed, move to the same day next month
+          const now = new Date()
+          const ccAsBankEntries: BankEntry[] = ccPayments.map((cc) => {
+            let ccDate = cc.date
+            while (ccDate <= now) {
+              const nextMonth = ccDate.getMonth() + 1
+              const nextYear = ccDate.getFullYear() + Math.floor(nextMonth / 12)
+              const normalizedMonth = nextMonth % 12
+              const day = Math.min(cc.date.getDate(), new Date(nextYear, normalizedMonth + 1, 0).getDate())
+              ccDate = new Date(nextYear, normalizedMonth, day)
+            }
+            return {
+              id: `cc_${cc.id}`,
+              date: ccDate,
+              status: 'expected' as const,
+              category: 'כרטיס אשראי',
+              vendor: 'כרטיס אשראי',
+              payment: cc.amount,
+              receipt: 0,
+              recurring: false,
+              source: 'manual' as const,
+            }
+          })
 
           const allBankEntries = [...bankEntries, ...ccAsBankEntries]
 
-          // Current balance: only actual (בפועל) transactions
-          const actualEntries = allBankEntries.filter((e) => e.status === 'actual')
+          // Current balance: only actual (בפועל) transactions from startingBalanceDate onward
+          const balanceFromDate = bankSettings.startingBalanceDate ? new Date(bankSettings.startingBalanceDate + 'T00:00:00') : null
+          const actualEntries = allBankEntries.filter((e) => e.status === 'actual' && (!balanceFromDate || e.date >= balanceFromDate))
           const actualPayments = actualEntries.reduce((s, e) => s + e.payment, 0)
           const actualReceipts = actualEntries.reduce((s, e) => s + e.receipt, 0)
           const currentBalance = bankSettings.startingBalance + actualReceipts - actualPayments
@@ -738,7 +772,12 @@ function DashboardContent({
           const expectedInRange = expectedEntries.filter((e) => e.date >= projFrom && e.date <= projTo)
           const expectedNet = expectedInRange.reduce((s, e) => s + e.receipt - e.payment, 0)
           let projectedBalance = currentBalance + expectedNet
-          const recurringEntries = allBankEntries.filter((e) => e.recurring)
+          // Deduplicate recurring entries by vendor — keep only the latest per vendor
+          const allRecurring = allBankEntries.filter((e) => e.recurring)
+          const seenVendors1 = new Set<string>()
+          const recurringEntries = [...allRecurring]
+            .sort((a, b) => b.date.getTime() - a.date.getTime())
+            .filter((e) => { if (seenVendors1.has(e.vendor)) return false; seenVendors1.add(e.vendor); return true })
           const today = new Date()
           for (const entry of recurringEntries) {
             const dayOfMonth = entry.date.getDate()
@@ -785,7 +824,10 @@ function DashboardContent({
               }
               importBankEntries(result.entries)
               if (result.startingBalance !== undefined) {
-                updateBankSettings({ startingBalance: result.startingBalance })
+                updateBankSettings({
+                  startingBalance: result.startingBalance,
+                  ...(result.startingBalanceDate ? { startingBalanceDate: result.startingBalanceDate } : {}),
+                })
               }
             } catch (err) {
               console.error('Bank import error:', err)
@@ -804,61 +846,39 @@ function DashboardContent({
                 onChange={handleBankImport}
               />
 
-              {/* Summary metrics */}
-              <div style={s.cardRow}>
-                <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
-                    יתרה נוכחית
-                    <HelpTooltip text="יתרת פתיחה בתוספת כל התנועות בסטטוס ״בפועל״ — תקבולות פחות תשלומים" />
-                  </span>
-                  <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: currentBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(currentBalance)}</span>
-                </div>
-                <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
-                    יתרה צפויה
-                    <HelpTooltip text="היתרה הנוכחית בתוספת כל התנועות הצפויות ותנועות קבועות בטווח התאריכים שנבחר. ברירת מחדל: חודש קדימה" />
-                  </span>
-                  <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: projectedBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(projectedBalance)}</span>
-                </div>
-                <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
-                    תזרים חודשי ממוצע
-                    <HelpTooltip text="ממוצע ההפרש בין תקבולות לתשלומים בכל חודש — מספר חיובי מראה שנכנס יותר ממה שיוצא" />
-                  </span>
-                  <span style={{
-                    display: 'block', fontSize: 32, fontWeight: 700,
-                    color: avgMonthlyNet >= 0 ? 'var(--green)' : 'var(--red)',
-                  }}>
-                    {avgMonthlyNet >= 0 ? '+' : ''}{fmt(avgMonthlyNet)}
-                  </span>
-                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>
-                    על בסיס {realMonthNets.length} חודשים
-                  </span>
-                </div>
-              </div>
-
-              {/* Settings row */}
+              {/* Filter bar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', direction: 'rtl', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', padding: '10px 16px', boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}><SlidersHorizontal size={13} strokeWidth={1.75} /> סינון</span>
+                <span style={{ borderRight: '1px solid var(--border)', height: 18, margin: '0 2px' }} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   יתרת פתיחה:
                   <input
                     type="number"
                     value={bankSettings.startingBalance}
                     onChange={(e) => updateBankSettings({ startingBalance: parseFloat(e.target.value) || 0 })}
-                    style={{ ...s.cfInput, width: 100 }}
+                    style={{ ...s.cfInput, width: 100, padding: '6px 10px', fontSize: 12 }}
                   />
                 </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                  מתאריך:
+                  <input
+                    type="date"
+                    value={bankSettings.startingBalanceDate || ''}
+                    onChange={(e) => updateBankSettings({ startingBalanceDate: e.target.value || undefined })}
+                    style={{ ...s.cfInput, padding: '6px 10px', fontSize: 12 }}
+                  />
+                </label>
+                <span style={{ borderRight: '1px solid var(--border)', height: 18, margin: '0 2px' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                   תחזית:
                   <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
                     מ-
-                    <input type="date" value={projDateFrom} onChange={(e) => setProjDateFrom(e.target.value)} style={s.cfInput} />
+                    <input type="date" value={projDateFrom} onChange={(e) => setProjDateFrom(e.target.value)} style={{ ...s.cfInput, padding: '6px 10px', fontSize: 12 }} />
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
                     עד
-                    <input type="date" value={projDateTo} onChange={(e) => setProjDateTo(e.target.value)} style={s.cfInput} />
+                    <input type="date" value={projDateTo} onChange={(e) => setProjDateTo(e.target.value)} style={{ ...s.cfInput, padding: '6px 10px', fontSize: 12 }} />
                   </label>
-                  <span style={{ borderRight: '1px solid var(--border)', height: 18, margin: '0 2px' }} />
                   {[1, 2, 3].map((m) => {
                     const target = new Date()
                     target.setMonth(target.getMonth() + m)
@@ -887,22 +907,71 @@ function DashboardContent({
                     )
                   })}
                 </div>
-                <button
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 8,
-                    background: (projDateFrom || projDateTo) ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-primary)',
-                    color: (projDateFrom || projDateTo) ? 'var(--red)' : 'var(--text-faint)',
-                    fontSize: 12, fontFamily: 'inherit',
-                    cursor: (projDateFrom || projDateTo) ? 'pointer' : 'not-allowed',
-                    marginRight: 'auto',
-                    ...((projDateFrom || projDateTo) ? { borderColor: 'var(--red)' } : {}),
-                  }}
-                  disabled={!projDateFrom && !projDateTo}
-                  onClick={() => { setProjDateFrom(''); setProjDateTo('') }}
-                >
-                  איפוס
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 'auto' }}>
+                  <button
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 8,
+                      background: (projDateFrom || projDateTo) ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-primary)',
+                      color: (projDateFrom || projDateTo) ? 'var(--red)' : 'var(--text-faint)',
+                      fontSize: 12, fontFamily: 'inherit',
+                      cursor: (projDateFrom || projDateTo) ? 'pointer' : 'not-allowed',
+                      ...((projDateFrom || projDateTo) ? { borderColor: 'var(--red)' } : {}),
+                    }}
+                    disabled={!projDateFrom && !projDateTo}
+                    onClick={() => { setProjDateFrom(''); setProjDateTo('') }}
+                  >
+                    איפוס
+                  </button>
+                  <button
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 8,
+                      background: bankEntries.length > 0 ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-primary)',
+                      color: bankEntries.length > 0 ? 'var(--red)' : 'var(--text-faint)',
+                      fontSize: 12, fontFamily: 'inherit',
+                      cursor: bankEntries.length > 0 ? 'pointer' : 'not-allowed',
+                      ...(bankEntries.length > 0 ? { borderColor: 'var(--red)' } : {}),
+                    }}
+                    disabled={bankEntries.length === 0}
+                    onClick={() => { if (confirm('למחוק את כל נתוני התזרים?')) clearBankEntries() }}
+                  >
+                    <Trash2 size={12} /> ניקוי נתונים
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary metrics */}
+              <div style={s.cardRow}>
+                <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
+                    יתרה נוכחית
+                    <HelpTooltip text="יתרת פתיחה בתוספת תנועות בסטטוס ״בפועל״ מתאריך היתרה ואילך — תקבולות פחות תשלומים" />
+                  </span>
+                  <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: currentBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(currentBalance)}</span>
+                </div>
+                <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
+                    יתרה צפויה
+                    <HelpTooltip text="היתרה הנוכחית בתוספת כל התנועות הצפויות ותנועות קבועות בטווח התאריכים שנבחר. ברירת מחדל: חודש קדימה" />
+                  </span>
+                  <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: projectedBalance >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(projectedBalance)}</span>
+                </div>
+                <div style={{ ...s.card, textAlign: 'center', padding: '28px 24px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 14, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
+                    תזרים חודשי ממוצע
+                    <HelpTooltip text="ממוצע ההפרש בין תקבולות לתשלומים בכל חודש — מספר חיובי מראה שנכנס יותר ממה שיוצא" />
+                  </span>
+                  <span style={{
+                    display: 'block', fontSize: 32, fontWeight: 700,
+                    color: avgMonthlyNet >= 0 ? 'var(--green)' : 'var(--red)',
+                  }}>
+                    {avgMonthlyNet >= 0 ? '+' : ''}{fmt(avgMonthlyNet)}
+                  </span>
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>
+                    על בסיס {realMonthNets.length} חודשים
+                  </span>
+                </div>
               </div>
 
               {/* Cash flow managed cards in 4-column grid */}
@@ -957,7 +1026,12 @@ function DashboardContent({
 
                     // Also generate projections for recurring entries (same logic as CashFlowTimeline)
                     const projEntries: typeof sorted = []
-                    const recurringForProj = allBankEntries.filter((e) => e.recurring)
+                    // Deduplicate recurring entries by vendor — keep only the latest per vendor
+                    const allRecurring2 = allBankEntries.filter((e) => e.recurring)
+                    const seenVendors2 = new Set<string>()
+                    const recurringForProj = [...allRecurring2]
+                      .sort((a, b) => b.date.getTime() - a.date.getTime())
+                      .filter((e) => { if (seenVendors2.has(e.vendor)) return false; seenVendors2.add(e.vendor); return true })
                     const today = new Date()
                     for (const entry of recurringForProj) {
                       const dayOfMonth = entry.date.getDate()
@@ -992,6 +1066,7 @@ function DashboardContent({
                     let minSeries: 'actual' | 'proj' = 'actual'
 
                     for (const entry of allSorted) {
+                      if (balanceFromDate && entry.date < balanceFromDate) continue
                       balance += entry.receipt - entry.payment
                       const entryTime = entry.date.getTime()
 
@@ -1076,10 +1151,9 @@ function DashboardContent({
                         </div>
                       </h2>
                       <CashFlowTimeline
-                        entries={allBankEntries}
+                        entries={balanceFromDate ? allBankEntries.filter((e) => e.date >= balanceFromDate) : allBankEntries}
                         startingBalance={bankSettings.startingBalance}
                         projectionMonths={derivedProjectionMonths}
-                        projectionEndDate={projTo}
                         onUpdateEntry={updateBankEntry}
                         onDeleteEntry={deleteBankEntry}
                       />

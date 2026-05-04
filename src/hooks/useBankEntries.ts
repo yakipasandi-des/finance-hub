@@ -89,16 +89,26 @@ export function useBankEntries() {
 
   const updateEntry = useCallback((id: string, changes: Partial<Omit<BankEntry, 'id'>>) => {
     setEntries((prev) => {
-      const updated = prev.map((e) => e.id === id ? { ...e, ...changes } : e)
+      let updated = prev.map((e) => e.id === id ? { ...e, ...changes } : e)
       saveEntries(updated)
-      // Sync recurring vendor list when recurring flag changes
+      // Sync recurring: only one entry per vendor should be recurring
       if ('recurring' in changes) {
         const entry = updated.find((e) => e.id === id)
         if (entry && entry.vendor) {
           const vendors = loadRecurringVendors()
-          if (changes.recurring) vendors.add(entry.vendor)
-          else vendors.delete(entry.vendor)
+          if (changes.recurring) {
+            vendors.add(entry.vendor)
+            // Un-mark other entries with the same vendor
+            updated = updated.map((e) =>
+              e.vendor === entry.vendor && e.id !== id && e.recurring
+                ? { ...e, recurring: false }
+                : e
+            )
+          } else {
+            vendors.delete(entry.vendor)
+          }
           saveRecurringVendors(vendors)
+          saveEntries(updated)
         }
       }
       return updated
@@ -117,15 +127,29 @@ export function useBankEntries() {
     setEntries((prev) => {
       // Keep manual entries, replace all imported ones
       const manualOnly = prev.filter((e) => e.source === 'manual')
-      // Reapply recurring flags from saved vendor list
+      // Reapply recurring flags: only mark one entry per vendor (the latest by date)
       const recurringVendors = loadRecurringVendors()
+      // Find the latest entry ID for each recurring vendor
+      const latestByVendor = new Map<string, string>()
+      const sortedDesc = [...newEntries].sort((a, b) => b.date.getTime() - a.date.getTime())
+      for (const e of sortedDesc) {
+        if (recurringVendors.has(e.vendor) && !latestByVendor.has(e.vendor)) {
+          latestByVendor.set(e.vendor, e.id)
+        }
+      }
+      const recurringIds = new Set(latestByVendor.values())
       const withRecurring = newEntries.map((e) =>
-        recurringVendors.has(e.vendor) ? { ...e, recurring: true } : e,
+        recurringIds.has(e.id) ? { ...e, recurring: true } : e,
       )
       const updated = [...manualOnly, ...withRecurring]
       saveEntries(updated)
       return updated
     })
+  }, [])
+
+  const clearEntries = useCallback(() => {
+    setEntries([])
+    saveEntries([])
   }, [])
 
   const updateSettings = useCallback((changes: Partial<BankSettings>) => {
@@ -136,5 +160,5 @@ export function useBankEntries() {
     })
   }, [])
 
-  return { entries, settings, addEntry, updateEntry, deleteEntry, importEntries, updateSettings }
+  return { entries, settings, addEntry, updateEntry, deleteEntry, importEntries, clearEntries, updateSettings }
 }

@@ -60,6 +60,7 @@ export interface BankEntry {
 
 export interface BankSettings {
   startingBalance: number
+  startingBalanceDate?: string // ISO date string (YYYY-MM-DD) — only entries on or after this date are counted
   projectionMonths: number
 }
 
