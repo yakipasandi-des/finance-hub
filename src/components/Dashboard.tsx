@@ -889,7 +889,9 @@ function DashboardContent({
                         key={m}
                         style={{
                           padding: '3px 8px',
-                          border: '1px solid var(--border)',
+                          borderWidth: 1,
+                          borderStyle: 'solid',
+                          borderColor: isActive ? 'var(--accent)' : 'var(--border)',
                           borderRadius: 6,
                           background: isActive ? 'var(--accent-fill)' : 'var(--bg-primary)',
                           color: isActive ? 'var(--accent)' : 'var(--text-muted)',
@@ -898,7 +900,6 @@ function DashboardContent({
                           cursor: 'pointer',
                           whiteSpace: 'nowrap' as const,
                           fontWeight: isActive ? 700 : 400,
-                          ...(isActive ? { borderColor: 'var(--accent)' } : {}),
                         }}
                         onClick={() => { setProjDateFrom(''); setProjDateTo(isActive ? '' : iso) }}
                       >
@@ -911,12 +912,13 @@ function DashboardContent({
                   <button
                     style={{
                       display: 'flex', alignItems: 'center', gap: 5,
-                      padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 8,
+                      padding: '5px 12px', borderRadius: 8,
+                      borderWidth: 1, borderStyle: 'solid',
+                      borderColor: (projDateFrom || projDateTo) ? 'var(--red)' : 'var(--border)',
                       background: (projDateFrom || projDateTo) ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-primary)',
                       color: (projDateFrom || projDateTo) ? 'var(--red)' : 'var(--text-faint)',
                       fontSize: 12, fontFamily: 'inherit',
                       cursor: (projDateFrom || projDateTo) ? 'pointer' : 'not-allowed',
-                      ...((projDateFrom || projDateTo) ? { borderColor: 'var(--red)' } : {}),
                     }}
                     disabled={!projDateFrom && !projDateTo}
                     onClick={() => { setProjDateFrom(''); setProjDateTo('') }}
@@ -926,12 +928,13 @@ function DashboardContent({
                   <button
                     style={{
                       display: 'flex', alignItems: 'center', gap: 5,
-                      padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 8,
+                      padding: '5px 12px', borderRadius: 8,
+                      borderWidth: 1, borderStyle: 'solid',
+                      borderColor: bankEntries.length > 0 ? 'var(--red)' : 'var(--border)',
                       background: bankEntries.length > 0 ? 'rgba(239, 68, 68, 0.06)' : 'var(--bg-primary)',
                       color: bankEntries.length > 0 ? 'var(--red)' : 'var(--text-faint)',
                       fontSize: 12, fontFamily: 'inherit',
                       cursor: bankEntries.length > 0 ? 'pointer' : 'not-allowed',
-                      ...(bankEntries.length > 0 ? { borderColor: 'var(--red)' } : {}),
                     }}
                     disabled={bankEntries.length === 0}
                     onClick={() => { if (confirm('למחוק את כל נתוני התזרים?')) clearBankEntries() }}
