@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
-import { GripVertical, Pencil, Trash2, Download, Upload, ChevronDown, ChevronLeft, Eye, EyeOff, Key } from 'lucide-react'
+import { GripVertical, Pencil, Trash2, Download, Upload, ChevronDown, ChevronLeft, Eye, EyeOff, Key, History, RotateCcw } from 'lucide-react'
 import type { Transaction } from '../types'
 import { Category, PALETTE_COLORS, EMOJI_PRESETS, getParentCategories, getChildCategories, buildCategoryTree } from '../categories'
 import { CategoryIcon } from '../icons'
 import { useCategories } from '../context/CategoriesContext'
+import { listSnapshots, restoreSnapshot, type BackupSnapshot } from '../utils/autoBackup'
 
 interface SettingsTabProps {
   allTransactions: Transaction[]
@@ -28,6 +29,10 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
   const [importError, setImportError] = useState<string | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const [expandedParent, setExpandedParent] = useState<string | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<BackupSnapshot | null>(null)
+  const [pendingImport, setPendingImport] = useState<Record<string, string> | null>(null)
+
+  const autoBackups = listSnapshots()
 
   // Claude API key
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('anthropic-api-key') ?? '')
@@ -74,28 +79,35 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
     URL.revokeObjectURL(url)
   }
 
+  // Parse + validate the chosen file, then stash it for a confirmation step —
+  // applying overwrites everything, so we never write until the user confirms.
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    setImportError(null)
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target?.result as string)
         if (!data.version) throw new Error('קובץ לא תקין')
-        if (data.categories) localStorage.setItem('categories', data.categories)
-        if (data.merchantCategoryMap) localStorage.setItem('merchantCategoryMap', data.merchantCategoryMap)
-        if (data.savings) localStorage.setItem('savings', data.savings)
-        if (data.budgets) localStorage.setItem('budgets', data.budgets)
-        if (data.manualEntries) localStorage.setItem('manualEntries', data.manualEntries)
-        if (data.bankEntries) localStorage.setItem('bankEntries', data.bankEntries)
-        if (data.bankSettings) localStorage.setItem('bankSettings', data.bankSettings)
-        window.location.reload()
+        setPendingImport(data)
       } catch {
         setImportError('שגיאה בייבוא — ודא שהקובץ הוא קובץ גיבוי תקין')
       }
     }
     reader.readAsText(file)
     e.target.value = ''
+  }
+
+  function applyImport(data: Record<string, string>) {
+    if (data.categories) localStorage.setItem('categories', data.categories)
+    if (data.merchantCategoryMap) localStorage.setItem('merchantCategoryMap', data.merchantCategoryMap)
+    if (data.savings) localStorage.setItem('savings', data.savings)
+    if (data.budgets) localStorage.setItem('budgets', data.budgets)
+    if (data.manualEntries) localStorage.setItem('manualEntries', data.manualEntries)
+    if (data.bankEntries) localStorage.setItem('bankEntries', data.bankEntries)
+    if (data.bankSettings) localStorage.setItem('bankSettings', data.bankSettings)
+    window.location.reload()
   }
 
   // Build category tree for hierarchical display
@@ -342,6 +354,36 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
           </div>
         </div>
         {importError && <p style={s.importError}>{importError}</p>}
+
+        {/* Daily auto-backups */}
+        <div style={s.autoBackupBlock}>
+          <div style={s.autoBackupHeader}>
+            <History size={15} strokeWidth={1.75} style={{ color: 'var(--text-muted)' }} />
+            <span style={s.backupLabel}>גיבויים אוטומטיים</span>
+          </div>
+          <p style={s.autoBackupDesc}>
+            המערכת שומרת תמונת מצב יומית של הנתונים (עד 7 ימים אחורה). שחזור יחליף את הנתונים הנוכחיים.
+          </p>
+          {autoBackups.length === 0 ? (
+            <p style={s.autoBackupEmpty}>אין גיבויים אוטומטיים עדיין — ייווצרו אוטומטית מהיום.</p>
+          ) : (
+            <div style={s.autoBackupList}>
+              {autoBackups.map((snap) => (
+                <div key={snap.exportedAt} style={s.autoBackupRow}>
+                  <span style={s.autoBackupDate}>
+                    {new Date(snap.exportedAt).toLocaleString('he-IL', {
+                      day: '2-digit', month: '2-digit', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </span>
+                  <button style={s.restoreBtn} onClick={() => setRestoreTarget(snap)}>
+                    <RotateCcw size={13} strokeWidth={1.75} /> שחזר
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       {/* ── General Settings ── */}
@@ -406,6 +448,26 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
           otherCategories={categories.filter((c) => c.id !== modal.category.id && !c.parentId)}
           onConfirm={(reassignTo, promoteChildren) => handleDelete(modal.category.id, reassignTo, promoteChildren)}
           onCancel={() => setModal(null)}
+        />
+      )}
+
+      {/* ── Confirm import dialog ── */}
+      {pendingImport && (
+        <ConfirmDialog
+          message="ייבוא קובץ הגיבוי יחליף את כל הנתונים הנוכחיים — קטגוריות, מיפויים, חסכונות ותזרים. גיבוי אוטומטי של המצב הנוכחי כבר נשמר וניתן לשחזור. להמשיך?"
+          confirmLabel="ייבא והחלף"
+          onConfirm={() => applyImport(pendingImport)}
+          onCancel={() => setPendingImport(null)}
+        />
+      )}
+
+      {/* ── Confirm restore dialog ── */}
+      {restoreTarget && (
+        <ConfirmDialog
+          message={`לשחזר את הגיבוי מ-${new Date(restoreTarget.exportedAt).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}? הנתונים הנוכחיים יוחלפו.`}
+          confirmLabel="שחזר"
+          onConfirm={() => { restoreSnapshot(restoreTarget); window.location.reload() }}
+          onCancel={() => setRestoreTarget(null)}
         />
       )}
 
@@ -775,4 +837,12 @@ const s: Record<string, React.CSSProperties> = {
   importError: { margin: '8px 0 0', fontSize: '13px', color: 'var(--red)' },
   apiModelRow: { display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px' },
   apiSelect: { padding: '9px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontFamily: 'inherit', fontSize: '13px', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none', direction: 'rtl' },
+  autoBackupBlock: { marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border)' },
+  autoBackupHeader: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' },
+  autoBackupDesc: { margin: '0 0 12px', fontSize: '12px', color: 'var(--text-muted)' },
+  autoBackupEmpty: { margin: 0, fontSize: '13px', color: 'var(--text-faint)' },
+  autoBackupList: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  autoBackupRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: 'var(--bg-primary)', borderRadius: '8px', direction: 'rtl' },
+  autoBackupDate: { fontSize: '13px', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' },
+  restoreBtn: { display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 12px', background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '6px', fontFamily: 'inherit', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
 }

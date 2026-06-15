@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { FileUpload } from './components/FileUpload'
 import { Dashboard } from './components/Dashboard'
 import { parseFiles } from './utils/parseFile'
+import { runDailyBackup } from './utils/autoBackup'
 import { useCategoryMap } from './hooks/useCategoryMap'
 import { useRecurringMerchants } from './hooks/useRecurringMerchants'
 import { CategoriesProvider } from './context/CategoriesContext'
@@ -15,6 +16,10 @@ function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const { map, setMapping, applyAutoSuggest } = useCategoryMap()
   const { recurringMerchants, toggleRecurring } = useRecurringMerchants()
+
+  // Daily auto-backup guardrail — snapshots persisted data once per day so a
+  // stray import/reset can't silently destroy categories & mappings.
+  useEffect(() => { runDailyBackup() }, [])
 
   const handleFilesSelect = async (files: File[], merge = false) => {
     if (files.length === 0) return
