@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { useFilters } from '../context/FilterContext'
-import { CategoryIcon } from '../icons'
+import { CategoryFilterDropdown } from './CategoryFilterDropdown'
 
 type SpendFilter = 'all' | 'variable' | 'recurring'
 
@@ -22,23 +22,20 @@ export function FilterBar({ spendFilter, setSpendFilter, recurringTotal, variabl
   } = useFilters()
 
   const [monthOpen, setMonthOpen] = useState(false)
-  const [catOpen, setCatOpen] = useState(false)
   const [spendOpen, setSpendOpen] = useState(false)
   const monthRef = useRef<HTMLDivElement>(null)
-  const catRef = useRef<HTMLDivElement>(null)
   const spendRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdowns on outside click
+  // Close dropdowns on outside click (the category dropdown manages its own)
   useEffect(() => {
-    if (!monthOpen && !catOpen && !spendOpen) return
+    if (!monthOpen && !spendOpen) return
     const handler = (e: MouseEvent) => {
       if (monthOpen && monthRef.current && !monthRef.current.contains(e.target as Node)) setMonthOpen(false)
-      if (catOpen && catRef.current && !catRef.current.contains(e.target as Node)) setCatOpen(false)
       if (spendOpen && spendRef.current && !spendRef.current.contains(e.target as Node)) setSpendOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [monthOpen, catOpen, spendOpen])
+  }, [monthOpen, spendOpen])
 
   // Month toggle
   const toggleMonth = (key: string) => {
@@ -64,17 +61,6 @@ export function FilterBar({ spendFilter, setSpendFilter, recurringTotal, variabl
       ? (availableMonths.find((m) => m.key === filters.months[0])?.label ?? '1 חודש')
       : `${filters.months.length} חודשים`
 
-  // Category button label
-  const singleCat = filters.categories.length === 1
-    ? availableCategories.find((c) => c.id === filters.categories[0])
-    : null
-  const catLabelText =
-    filters.categories.length === 0
-      ? 'כל הקטגוריות'
-      : filters.categories.length === 1
-      ? (singleCat?.name ?? '1 קטגוריה')
-      : `${filters.categories.length} קטגוריות`
-
   // Amount slider
   const minPct = maxAmount > 0 ? (filters.amountMin / maxAmount) * 100 : 0
   const maxPct = maxAmount > 0 ? (filters.amountMax / maxAmount) * 100 : 100
@@ -98,7 +84,7 @@ export function FilterBar({ spendFilter, setSpendFilter, recurringTotal, variabl
         <div ref={monthRef} style={s.dropWrap}>
           <button
             style={{ ...s.dropBtn, ...(filters.months.length > 0 ? s.dropBtnActive : {}) }}
-            onClick={() => { setMonthOpen((o) => !o); setCatOpen(false); setSpendOpen(false) }}
+            onClick={() => { setMonthOpen((o) => !o); setSpendOpen(false) }}
           >
             {monthLabel} <ChevronDown size={12} strokeWidth={2} />
           </button>
@@ -125,45 +111,20 @@ export function FilterBar({ spendFilter, setSpendFilter, recurringTotal, variabl
         </div>
 
         {/* Category dropdown */}
-        <div ref={catRef} style={s.dropWrap}>
-          <button
-            style={{ ...s.dropBtn, ...(filters.categories.length > 0 ? s.dropBtnActive : {}) }}
-            onClick={() => { setCatOpen((o) => !o); setMonthOpen(false); setSpendOpen(false) }}
-          >
-            {singleCat && <CategoryIcon icon={singleCat.icon} size={13} />}
-            {catLabelText} <ChevronDown size={12} strokeWidth={2} />
-          </button>
-          {catOpen && (
-            <div style={s.dropdown}>
-              <div style={s.dropHeader}>
-                <button style={s.selectAll} onClick={() => updateFilters({ categories: availableCategories.map((c) => c.id) })}>בחר הכל</button>
-                <button style={s.selectAll} onClick={() => updateFilters({ categories: [] })}>נקה הכל</button>
-              </div>
-              {availableCategories.map((c) => (
-                <label key={c.id} style={s.dropRow}>
-                  <input
-                    type="checkbox"
-                    checked={filters.categories.includes(c.id)}
-                    onChange={() => toggleCategory(c.id)}
-                    style={{ accentColor: c.color, flexShrink: 0 }}
-                  />
-                  <span style={{ ...s.dropRowLabel, color: c.color, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <CategoryIcon icon={c.icon} size={14} />
-                    {c.name}
-                  </span>
-                  <span style={s.dropRowCount}>{c.count}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
+        <CategoryFilterDropdown
+          options={availableCategories}
+          selected={filters.categories}
+          onToggle={toggleCategory}
+          onSelectAll={() => updateFilters({ categories: availableCategories.map((c) => c.id) })}
+          onClear={() => updateFilters({ categories: [] })}
+        />
 
         {/* Spend type dropdown */}
         {spendFilter && setSpendFilter && (
           <div ref={spendRef} style={s.dropWrap}>
             <button
               style={{ ...s.dropBtn, ...(spendFilter !== 'all' ? s.dropBtnActive : {}) }}
-              onClick={() => { setSpendOpen((o) => !o); setMonthOpen(false); setCatOpen(false) }}
+              onClick={() => { setSpendOpen((o) => !o); setMonthOpen(false) }}
             >
               {spendFilter === 'all' ? 'סוג הוצאות' : spendFilter === 'recurring' ? 'הוצאות קבועות' : 'הוצאות משתנות'}
               {' '}<ChevronDown size={12} strokeWidth={2} />

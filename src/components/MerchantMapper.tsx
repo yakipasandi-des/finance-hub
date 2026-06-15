@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { ChevronDown, X, Wand2 } from 'lucide-react'
 import type { Transaction } from '../types'
-import { autoSuggest, buildCategoryTree } from '../categories'
+import { autoSuggest, buildCategoryTree, getChildCategories } from '../categories'
 import { useCategories } from '../context/CategoriesContext'
 import { CategoryIcon } from '../icons'
+import { CategoryFilterDropdown, type CategoryFilterOption } from './CategoryFilterDropdown'
 
 interface MerchantMapperProps {
   transactions: Transaction[]
@@ -155,7 +156,9 @@ function optStyle(color: string): React.CSSProperties {
 type MapFilter = 'all' | 'mapped' | 'unmapped'
 
 export function MerchantMapper({ transactions, map, setMapping }: MerchantMapperProps) {
+  const { categories } = useCategories()
   const [mapFilter, setMapFilter] = useState<MapFilter>('all')
+  const [catFilter, setCatFilter] = useState<string[]>([])
 
   const merchantTotals = transactions.reduce<Record<string, number>>((acc, tx) => {
     acc[tx.merchant] = (acc[tx.merchant] ?? 0) + tx.amount
@@ -173,11 +176,36 @@ export function MerchantMapper({ transactions, map, setMapping }: MerchantMapper
   const unmappedCount = allMerchants.length - mapped
   const coveragePct = allMerchants.length > 0 ? Math.round((mapped / allMerchants.length) * 100) : 0
 
-  const merchants = mapFilter === 'all'
-    ? allMerchants
-    : mapFilter === 'mapped'
-    ? allMerchants.filter(([m]) => map[m])
-    : allMerchants.filter(([m]) => !map[m])
+  // Category-filter options: one entry per category that has ≥1 merchant mapped
+  // to it (flat, with merchant counts) — mirrors the global filter's behavior.
+  const categoryOptions = useMemo<CategoryFilterOption[]>(() => {
+    const counts: Record<string, number> = {}
+    for (const [m] of allMerchants) {
+      const id = map[m]
+      if (id) counts[id] = (counts[id] ?? 0) + 1
+    }
+    return categories
+      .filter((c) => (counts[c.id] ?? 0) > 0)
+      .map((c) => ({ id: c.id, name: c.name, icon: c.icon, color: c.color, count: counts[c.id] }))
+  }, [allMerchants, map, categories])
+
+  // Selecting a parent category also matches its sub-categories (same as the
+  // global filter's parent→children expansion).
+  const catFilterSet = useMemo(() => {
+    if (catFilter.length === 0) return null
+    const set = new Set(catFilter)
+    for (const id of catFilter) {
+      for (const child of getChildCategories(id, categories)) set.add(child.id)
+    }
+    return set
+  }, [catFilter, categories])
+
+  const merchants = allMerchants.filter(([m]) => {
+    if (mapFilter === 'mapped' && !map[m]) return false
+    if (mapFilter === 'unmapped' && map[m]) return false
+    if (catFilterSet && !catFilterSet.has(map[m] ?? '')) return false
+    return true
+  })
 
   function handleAutoMap() {
     // Tokenize a merchant name into meaningful words (length >= 2)
@@ -235,22 +263,33 @@ export function MerchantMapper({ transactions, map, setMapping }: MerchantMapper
   return (
     <div>
       <div style={styles.headerRow}>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {([
-            ['all', 'הכל'],
-            ['mapped', 'ממופה'],
-            ['unmapped', 'לא ממופה'],
-          ] as [MapFilter, string][]).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setMapFilter(id)}
-              style={{ ...styles.filterBtn, ...(mapFilter === id ? styles.filterActive : {}) }}
-            >
-              {id === 'mapped' && <span style={{ ...styles.dot, background: 'var(--green)' }} />}
-              {id === 'unmapped' && <span style={{ ...styles.dot, background: 'var(--border)', border: '1px solid var(--text-faint)' }} />}
-              {label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            {([
+              ['all', 'הכל'],
+              ['mapped', 'ממופה'],
+              ['unmapped', 'לא ממופה'],
+            ] as [MapFilter, string][]).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setMapFilter(id)}
+                style={{ ...styles.filterBtn, ...(mapFilter === id ? styles.filterActive : {}) }}
+              >
+                {id === 'mapped' && <span style={{ ...styles.dot, background: 'var(--green)' }} />}
+                {id === 'unmapped' && <span style={{ ...styles.dot, background: 'var(--border)', border: '1px solid var(--text-faint)' }} />}
+                {label}
+              </button>
+            ))}
+          </div>
+          {categoryOptions.length > 0 && (
+            <CategoryFilterDropdown
+              options={categoryOptions}
+              selected={catFilter}
+              onToggle={(id) => setCatFilter((prev) => prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id])}
+              onSelectAll={() => setCatFilter(categoryOptions.map((c) => c.id))}
+              onClear={() => setCatFilter([])}
+            />
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           {autoMapCount !== null && (
