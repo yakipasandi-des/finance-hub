@@ -64,6 +64,7 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
       exportedAt: new Date().toISOString(),
       categories: localStorage.getItem('categories'),
       merchantCategoryMap: localStorage.getItem('merchantCategoryMap'),
+      bankCategoryMap: localStorage.getItem('bankCategoryMap'),
       savings: localStorage.getItem('savings'),
       budgets: localStorage.getItem('budgets'),
       manualEntries: localStorage.getItem('manualEntries'),
@@ -102,6 +103,7 @@ export function SettingsTab({ allTransactions, map, setMapping, onClearAll }: Se
   function applyImport(data: Record<string, string>) {
     if (data.categories) localStorage.setItem('categories', data.categories)
     if (data.merchantCategoryMap) localStorage.setItem('merchantCategoryMap', data.merchantCategoryMap)
+    if (data.bankCategoryMap) localStorage.setItem('bankCategoryMap', data.bankCategoryMap)
     if (data.savings) localStorage.setItem('savings', data.savings)
     if (data.budgets) localStorage.setItem('budgets', data.budgets)
     if (data.manualEntries) localStorage.setItem('manualEntries', data.manualEntries)

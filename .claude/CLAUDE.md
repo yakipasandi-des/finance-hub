@@ -91,4 +91,6 @@ Multiple files can be uploaded; `parseFiles()` deduplicates by `date|merchant|am
 
 ## localStorage Keys
 
-`merchantCategoryMap`, `categories`, `savings`, `budgets`, `manualEntries`, `bankEntries`, `bankSettings`, `recurringMerchants`, `savings-goal`, `inflationData`. All cleared via the "clear all" button in `App`. **No schema versioning or migration** — changing a persisted type's shape can break existing users' localStorage.
+`merchantCategoryMap`, `bankCategoryMap` (vendor→category for bank entries; per-row `BankEntry.categoryId` overrides it), `categories`, `savings`, `budgets`, `manualEntries`, `bankEntries`, `bankSettings`, `recurringMerchants`, `savings-goal`, `inflationData`, `autoBackups` (rolling daily snapshots). All cleared via the "clear all" button in `App` except `autoBackups` (deliberately preserved for recovery). **No schema versioning or migration** — changing a persisted type's shape can break existing users' localStorage.
+
+**Bank → insights:** bank expense rows (`payment > 0`) feed insights/budget only when they resolve to a category — via `bankCategoryMap[vendor]` or a per-row `categoryId` override (`resolveBankCategoryId` in `src/utils/bankCategory.ts`). The vendor map is edited in the mapping tab's "חשבון בנק" view (`BankVendorMapper`); per-row overrides in the cash-flow timeline. Uncategorized rows (e.g. the aggregate credit-card debit) are excluded, avoiding double-counting.

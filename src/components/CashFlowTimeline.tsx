@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Trash2, Check, X, RotateCcw } from 'lucide-react'
 import type { BankEntry } from '../types'
+import type { Category } from '../categories'
+import { CategoryIcon } from '../icons'
+import { resolveBankCategoryId } from '../utils/bankCategory'
 import { useColumnResize } from '../hooks/useColumnResize'
 import { ResizeColHandle } from './ResizeColHandle'
 
@@ -11,6 +14,8 @@ interface CashFlowTimelineProps {
   projectionEndDate?: Date
   onUpdateEntry: (id: string, changes: Partial<BankEntry>) => void
   onDeleteEntry: (id: string) => void
+  categories: Category[]
+  bankCategoryMap: Record<string, string>
 }
 
 const HEBREW_MONTHS = [
@@ -87,8 +92,10 @@ export function CashFlowTimeline({
   projectionEndDate,
   onUpdateEntry,
   onDeleteEntry,
+  categories,
+  bankCategoryMap,
 }: CashFlowTimelineProps) {
-  const colResize = useColumnResize('finance-hub-cf-col-widths', [100, 70, 100, 140, 50, 90, 90, 90, 60])
+  const colResize = useColumnResize('finance-hub-cf-col-widths-v2', [100, 70, 100, 140, 50, 90, 90, 90, 130, 60])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<Partial<BankEntry>>({})
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
@@ -129,6 +136,7 @@ export function CashFlowTimeline({
       receipt: entry.receipt,
       status: entry.status,
       recurring: entry.recurring,
+      categoryId: entry.categoryId,
     })
   }
 
@@ -184,7 +192,11 @@ export function CashFlowTimeline({
                 </th>
               ))}
               <th style={{ ...s.th, ...colResize.thStyle(8) }}>
+                קטגוריה
                 <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(8, e)} />
+              </th>
+              <th style={{ ...s.th, ...colResize.thStyle(9) }}>
+                <ResizeColHandle handleStyle={colResize.handleStyle} lineStyle={colResize.handleLineStyle} lineHoverStyle={colResize.handleLineHoverStyle} onMouseDown={(e) => colResize.onMouseDown(9, e)} />
               </th>
             </tr>
           </thead>
@@ -201,7 +213,7 @@ export function CashFlowTimeline({
               return [
                 showMonthSep && (
                   <tr key={`sep-${mk}`}>
-                    <td colSpan={9} style={s.monthSep}>
+                    <td colSpan={10} style={s.monthSep}>
                       {HEBREW_MONTHS[entry.date.getMonth()]} {entry.date.getFullYear()}
                     </td>
                   </tr>
@@ -319,6 +331,32 @@ export function CashFlowTimeline({
                   </td>
                   <td style={{ ...s.td, fontWeight: 600, color: balance >= 0 ? 'var(--green)' : 'var(--red)', textAlign: 'left' }}>
                     {fmt(balance)}
+                  </td>
+                  <td style={s.td}>
+                    {entry.payment <= 0 ? (
+                      <span style={{ color: 'var(--text-faint)' }}>—</span>
+                    ) : isEditing ? (
+                      <select
+                        value={editDraft.categoryId ?? ''}
+                        onChange={(e) => setEditDraft({ ...editDraft, categoryId: e.target.value || undefined })}
+                        style={s.editInput}
+                        onClick={(e) => e.stopPropagation()} onKeyDown={handleEditKeyDown}
+                      >
+                        <option value="">— לפי ספק —</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>{c.parentId ? '— ' : ''}{c.name}</option>
+                        ))}
+                      </select>
+                    ) : (() => {
+                      const catId = resolveBankCategoryId(entry, bankCategoryMap)
+                      const cat = catId ? categories.find((c) => c.id === catId) : undefined
+                      if (!cat) return <span style={{ color: 'var(--text-faint)' }}>ללא</span>
+                      return (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: cat.color, fontSize: 12, fontWeight: 600 }}>
+                          <CategoryIcon icon={cat.icon} size={13} /> {cat.name}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td style={{ ...s.td, textAlign: 'center' }}>
                     {isEditing ? (

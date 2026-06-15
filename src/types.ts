@@ -56,6 +56,7 @@ export interface BankEntry {
   receipt: number            // תקבולות (income amount, 0 if expense)
   recurring: boolean         // auto-project into future months
   source: 'import' | 'manual'
+  categoryId?: string        // manually assigned insight category; only set rows feed insights
 }
 
 export interface BankSettings {

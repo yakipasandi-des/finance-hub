@@ -83,6 +83,7 @@ function App() {
 
   const handleClearAll = () => {
     localStorage.removeItem('merchantCategoryMap')
+    localStorage.removeItem('bankCategoryMap')
     localStorage.removeItem('categories')
     localStorage.removeItem('savings')
     localStorage.removeItem('budgets')

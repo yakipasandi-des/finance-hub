@@ -16,12 +16,15 @@ import { useSavings } from '../hooks/useSavings'
 import { useBudgets } from '../hooks/useBudgets'
 import { useManualEntries } from '../hooks/useManualEntries'
 import { useBankEntries } from '../hooks/useBankEntries'
+import { useBankCategoryMap } from '../hooks/useBankCategoryMap'
 import { useCreditCardPayments } from '../hooks/useCreditCardPayments'
 import { useCardLayout } from '../hooks/useCardLayout'
 import type { CardLayout } from '../hooks/useCardLayout'
 import { parseBankExcel } from '../utils/parseFile'
+import { resolveBankCategoryId } from '../utils/bankCategory'
 import { FilterBar } from './FilterBar'
 import { MerchantMapper } from './MerchantMapper'
+import { BankVendorMapper } from './BankVendorMapper'
 import { TransactionTable } from './TransactionTable'
 import { HelpTooltip } from './HelpTooltip'
 import { SettingsTab } from './SettingsTab'
@@ -89,9 +92,11 @@ interface DashboardProps {
 }
 
 export function Dashboard({ transactions, map, setMapping, onAddFiles, onClearAll, recurringMerchants, toggleRecurring }: DashboardProps) {
+  const bank = useBankEntries()
+  const bankCat = useBankCategoryMap()
   return (
-    <FilterProvider transactions={transactions} map={map}>
-      <DashboardContent map={map} setMapping={setMapping} onAddFiles={onAddFiles} onClearAll={onClearAll} recurringMerchants={recurringMerchants} toggleRecurring={toggleRecurring} />
+    <FilterProvider transactions={transactions} map={map} bankEntries={bank.entries} bankCategoryMap={bankCat.map}>
+      <DashboardContent map={map} setMapping={setMapping} onAddFiles={onAddFiles} onClearAll={onClearAll} recurringMerchants={recurringMerchants} toggleRecurring={toggleRecurring} bank={bank} bankCat={bankCat} />
     </FilterProvider>
   )
 }
@@ -106,6 +111,8 @@ function DashboardContent({
   onClearAll,
   recurringMerchants,
   toggleRecurring,
+  bank,
+  bankCat,
 }: {
   map: Record<string, string>
   setMapping: (merchant: string, categoryId: string | null) => void
@@ -113,6 +120,8 @@ function DashboardContent({
   onClearAll: () => void
   recurringMerchants: Set<string>
   toggleRecurring: (merchant: string) => void
+  bank: ReturnType<typeof useBankEntries>
+  bankCat: ReturnType<typeof useBankCategoryMap>
 }) {
   const { categories } = useCategories()
   const { accounts, addAccount, updateAccount, deleteAccount, savingsGoal, setSavingsGoal, inflation, setInflation } = useSavings()
@@ -127,7 +136,8 @@ function DashboardContent({
     importEntries: importBankEntries,
     clearEntries: clearBankEntries,
     updateSettings: updateBankSettings,
-  } = useBankEntries()
+  } = bank
+  const { map: bankCategoryMap, setMapping: setBankMapping } = bankCat
   const {
     payments: ccPayments,
     addPayment: addCcPayment,
@@ -161,6 +171,7 @@ function DashboardContent({
   const {
     filteredTransactions,
     allTransactions,
+    filteredBankExpenses,
     activeFilterCount,
     updateFilters,
     filters,
@@ -238,9 +249,20 @@ function DashboardContent({
 
   // Track which card is hovered (for resize handle visibility)
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
+  const [mappingSource, setMappingSource] = useState<'card' | 'bank'>('card')
 
-  // --- Summary stats (from filteredTransactions) ---
-  const total = filteredTransactions.reduce((s, t) => s + t.amount, 0)
+  // --- Manually-categorized bank expenses feeding insights (apply spend filter via recurring flag) ---
+  const insightsBankExpenses =
+    spendFilter === 'all'
+      ? filteredBankExpenses
+      : spendFilter === 'recurring'
+      ? filteredBankExpenses.filter((b) => b.recurring)
+      : filteredBankExpenses.filter((b) => !b.recurring)
+  const bankInsightsTotal = insightsBankExpenses.reduce((s, b) => s + b.amount, 0)
+  const bankRecurringTotal = filteredBankExpenses.filter((b) => b.recurring).reduce((s, b) => s + b.amount, 0)
+
+  // --- Summary stats (credit card + categorized bank expenses) ---
+  const total = filteredTransactions.reduce((s, t) => s + t.amount, 0) + filteredBankExpenses.reduce((s, b) => s + b.amount, 0)
   // --- Insights tab: apply SpendFilter on top of global filter ---
   const insightsTxs =
     spendFilter === 'all'
@@ -249,8 +271,8 @@ function DashboardContent({
       ? filteredTransactions.filter((t) => isRecurring(t, recurringMerchants))
       : filteredTransactions.filter((t) => !isRecurring(t, recurringMerchants))
 
-  const insightsTotal = insightsTxs.reduce((s, t) => s + t.amount, 0)
-  const recurringTotal = filteredTransactions.filter((t) => isRecurring(t, recurringMerchants)).reduce((s, t) => s + t.amount, 0)
+  const insightsTotal = insightsTxs.reduce((s, t) => s + t.amount, 0) + bankInsightsTotal
+  const recurringTotal = filteredTransactions.filter((t) => isRecurring(t, recurringMerchants)).reduce((s, t) => s + t.amount, 0) + bankRecurringTotal
   const variableTotal = total - recurringTotal
 
   // --- Chart 1: by category (aggregate at parent level) ---
@@ -268,6 +290,11 @@ function DashboardContent({
     } else {
       manualUncatAmount += me.amount
     }
+  }
+
+  // Merge categorized bank expenses into raw amounts (always have a category)
+  for (const b of insightsBankExpenses) {
+    rawCatAmounts[b.categoryId] = (rawCatAmounts[b.categoryId] ?? 0) + Math.round(b.amount)
   }
 
   const uncatAmount = Math.round(insightsTxs.filter((t) => !map[t.merchant]).reduce((s, t) => s + t.amount, 0) + manualUncatAmount)
@@ -323,6 +350,14 @@ function DashboardContent({
     recurringManualByCategory[catId] = (recurringManualByCategory[catId] ?? 0) + Math.round(me.amount)
   }
 
+  // Bucket categorized bank expenses by month → category (they carry real dates)
+  const bankByMonthCat: Record<string, Record<string, number>> = {}
+  for (const b of insightsBankExpenses) {
+    const key = `${b.date.getFullYear()}-${String(b.date.getMonth() + 1).padStart(2, '0')}`
+    const bucket = (bankByMonthCat[key] = bankByMonthCat[key] ?? {})
+    bucket[b.categoryId] = (bucket[b.categoryId] ?? 0) + Math.round(b.amount)
+  }
+
   // Use only parent categories for the monthly chart
   const parentCats = getParentCategories(categories)
   const activeParentCats = parentCats.filter((parent) => {
@@ -330,25 +365,42 @@ function DashboardContent({
     const allIds = [parent.id, ...childIds]
     const hasTx = insightsTxs.some((t) => allIds.includes(map[t.merchant]))
     const hasManual = allIds.some((id) => recurringManualByCategory[id])
-    return hasTx || hasManual
+    const hasBank = insightsBankExpenses.some((b) => allIds.includes(b.categoryId))
+    return hasTx || hasManual || hasBank
   })
 
-  const monthChartData = Object.keys(monthGroups).sort().map((key) => {
+  const monthKeysAll = [...new Set([...Object.keys(monthGroups), ...Object.keys(bankByMonthCat)])].sort()
+  const monthChartData = monthKeysAll.map((key) => {
     const [y, m] = key.split('-')
+    const txs = monthGroups[key] ?? []
+    const bankCatMap = bankByMonthCat[key] ?? {}
     const entry: Record<string, unknown> = { month: `${HEBREW_MONTHS[parseInt(m) - 1]} '${y.slice(2)}` }
     for (const parent of activeParentCats) {
       const childIds = getChildCategories(parent.id, categories).map((c) => c.id)
       const allIds = [parent.id, ...childIds]
-      const txAmount = Math.round(monthGroups[key].filter((t) => allIds.includes(map[t.merchant])).reduce((s, t) => s + t.amount, 0))
+      const txAmount = Math.round(txs.filter((t) => allIds.includes(map[t.merchant])).reduce((s, t) => s + t.amount, 0))
       const manualAmount = allIds.reduce((s, id) => s + (recurringManualByCategory[id] ?? 0), 0)
-      const total = txAmount + manualAmount
+      const bankAmount = allIds.reduce((s, id) => s + (bankCatMap[id] ?? 0), 0)
+      const total = txAmount + manualAmount + bankAmount
       if (total > 0) entry[parent.id] = total
     }
-    const uncat = Math.round(monthGroups[key].filter((t) => !map[t.merchant]).reduce((s, t) => s + t.amount, 0)) + (recurringManualByCategory['_uncat'] ?? 0)
+    const uncat = Math.round(txs.filter((t) => !map[t.merchant]).reduce((s, t) => s + t.amount, 0)) + (recurringManualByCategory['_uncat'] ?? 0)
     if (uncat > 0) entry['_uncat'] = uncat
     return entry
   })
 
+  // --- Top expenses: include categorized bank rows as vendor "merchants" ---
+  const bankAsTx = (b: { date: Date; vendor: string; amount: number; recurring: boolean }): Transaction => ({
+    date: b.date, merchant: b.vendor, amount: b.amount, notes: b.recurring ? 'הוראת קבע' : undefined,
+  })
+  const allBankCatItems = bankEntries.filter((e) => e.payment > 0 && resolveBankCategoryId(e, bankCategoryMap))
+  const topExpensesMap: Record<string, string> = { ...map }
+  for (const e of allBankCatItems) topExpensesMap[e.vendor] = resolveBankCategoryId(e, bankCategoryMap) as string
+  const topExpensesTxs = [...insightsTxs, ...insightsBankExpenses.map(bankAsTx)]
+  const topExpensesAllTxs = [
+    ...allTransactions,
+    ...allBankCatItems.map((e) => bankAsTx({ date: e.date, vendor: e.vendor, amount: e.payment, recurring: e.recurring })),
+  ]
 
   const sidebarWidth = sidebarCollapsed ? 64 : 220
 
@@ -662,9 +714,9 @@ function DashboardContent({
                       <HelpTooltip text="ההוצאות הגדולות ביותר בתקופה הנבחרת, מדורגות לפי סכום. ניתן ללחוץ על שורה לסינון לפי קטגוריה" />
                     </h2>
                     <TopExpensesCard
-                      transactions={insightsTxs}
-                      allTransactions={allTransactions}
-                      map={map}
+                      transactions={topExpensesTxs}
+                      allTransactions={topExpensesAllTxs}
+                      map={topExpensesMap}
                       budgets={budgets}
                       recurringMerchants={recurringMerchants}
                       selectedMonths={filters.months}
@@ -684,7 +736,7 @@ function DashboardContent({
                         <button style={{ ...s.addInlineBtn, marginRight: 0 }} onClick={() => setBudgetAdding(true)}>+ הוסף תקציב</button>
                       </span>
                     </h2>
-                    <BudgetCard budgets={budgets} setBudget={setBudget} removeBudget={removeBudget} map={map} manualExpenses={manualExpenses} manualIncome={manualIncome} bankEntries={bankEntries} adding={budgetAdding} setAdding={setBudgetAdding} showSuggestionsModal={budgetSuggestionsOpen} setShowSuggestionsModal={setBudgetSuggestionsOpen} />
+                    <BudgetCard budgets={budgets} setBudget={setBudget} removeBudget={removeBudget} map={map} manualExpenses={manualExpenses} manualIncome={manualIncome} bankEntries={bankEntries} bankCategoryMap={bankCategoryMap} adding={budgetAdding} setAdding={setBudgetAdding} showSuggestionsModal={budgetSuggestionsOpen} setShowSuggestionsModal={setBudgetSuggestionsOpen} />
                   </div>
                 )
 
@@ -700,10 +752,32 @@ function DashboardContent({
         {tab === 'mapping' && (
           <div style={s.card}>
             <h2 style={s.cardTitle}>
-              מיפוי בתי עסק לקטגוריות
-              <HelpTooltip text="שייך כל בית עסק לקטגוריה. הרשימה ממוינת לפי סכום הוצאה — התחל מהגדולים להשפעה הרבה ביותר על התובנות. המיפוי נשמר אוטומטית" />
+              מיפוי לקטגוריות
+              <HelpTooltip text="שייך כל בית עסק / ספק לקטגוריה. במצב 'חשבון בנק' — בחירת קטגוריה לספק חלה על כל השורות שלו בתזרים. ניתן לעקוף שורה בודדת ישירות בטבלת התזרים. המיפוי נשמר אוטומטית" />
+              <span style={{ marginRight: 'auto', display: 'flex', gap: 4 }}>
+                {([
+                  ['card', 'כרטיס אשראי'],
+                  ['bank', 'חשבון בנק'],
+                ] as ['card' | 'bank', string][]).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setMappingSource(id)}
+                    style={{ ...s.mapSourceBtn, ...(mappingSource === id ? s.mapSourceBtnActive : {}) }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </span>
             </h2>
-            <MerchantMapper transactions={allTransactions} map={map} setMapping={setMapping} />
+            {mappingSource === 'card' ? (
+              <MerchantMapper transactions={allTransactions} map={map} setMapping={setMapping} />
+            ) : (
+              <BankVendorMapper
+                bankEntries={bankEntries}
+                bankCategoryMap={bankCategoryMap}
+                setBankMapping={setBankMapping}
+              />
+            )}
           </div>
         )}
 
@@ -1159,6 +1233,8 @@ function DashboardContent({
                         projectionMonths={derivedProjectionMonths}
                         onUpdateEntry={updateBankEntry}
                         onDeleteEntry={deleteBankEntry}
+                        categories={categories}
+                        bankCategoryMap={bankCategoryMap}
                       />
                     </div>
                   )
@@ -1461,6 +1537,8 @@ const s: Record<string, React.CSSProperties> = {
   cardSub: { fontSize: '13px', fontWeight: 400, color: 'var(--text-muted)' },
   addInlineBtn: { marginRight: 'auto', padding: '6px 14px', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', color: '#fff', fontWeight: 600, transition: 'opacity 0.15s ease' },
   empty: { color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '32px 0', margin: 0 },
+  mapSourceBtn: { padding: '5px 14px', border: '1px solid var(--border)', borderRadius: 7, background: 'transparent', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', fontWeight: 500 },
+  mapSourceBtnActive: { background: 'var(--accent-fill)', color: 'var(--accent)', borderColor: 'var(--accent)', fontWeight: 700 },
   metricBox: { flex: '1 1 140px', textAlign: 'center' as const, padding: '16px 12px' },
   metricLabel: { display: 'block', fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 },
   metricValue: { display: 'block', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' },

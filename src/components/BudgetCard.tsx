@@ -6,6 +6,7 @@ import { CategoryIcon } from '../icons'
 import { Trash2, ArrowRight, ArrowLeft, Lightbulb, X, Plus, ChevronDown } from 'lucide-react'
 import type { ManualEntry, BankEntry } from '../types'
 import { buildCategoryTree, getChildCategories } from '../categories'
+import { resolveBankCategoryId } from '../utils/bankCategory'
 
 const HEBREW_MONTHS = [
   'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
@@ -20,6 +21,7 @@ interface BudgetCardProps {
   manualExpenses?: ManualEntry[]
   manualIncome?: ManualEntry[]
   bankEntries?: BankEntry[]
+  bankCategoryMap?: Record<string, string>
   adding?: boolean
   setAdding?: (v: boolean) => void
   showSuggestionsModal?: boolean
@@ -35,7 +37,7 @@ function monthLabel(key: string): string {
   return `${HEBREW_MONTHS[parseInt(month) - 1]} ${year}`
 }
 
-export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpenses, manualIncome, bankEntries, adding: addingProp, setAdding: setAddingProp, showSuggestionsModal, setShowSuggestionsModal }: BudgetCardProps) {
+export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpenses, manualIncome, bankEntries, bankCategoryMap, adding: addingProp, setAdding: setAddingProp, showSuggestionsModal, setShowSuggestionsModal }: BudgetCardProps) {
   const { categories } = useCategories()
   const { allTransactions, availableMonths } = useFilters()
 
@@ -85,6 +87,17 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
         }
       }
     }
+    // Categorized bank expenses for the display month (per-row override or vendor map)
+    if (bankEntries) {
+      for (const be of bankEntries) {
+        if (be.payment <= 0) continue
+        const catId = resolveBankCategoryId(be, bankCategoryMap ?? {})
+        if (!catId) continue
+        const key = `${be.date.getFullYear()}-${String(be.date.getMonth() + 1).padStart(2, '0')}`
+        if (key !== displayMonth) continue
+        raw[catId] = (raw[catId] ?? 0) + be.payment
+      }
+    }
 
     // Roll up parent actuals: for each budgeted parent, sum self + all children
     const pActuals: Record<string, number> = {}
@@ -99,7 +112,7 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
     }
 
     return { rawActuals: raw, parentActuals: pActuals }
-  }, [allTransactions, map, displayMonth, manualExpenses, budgets, categories])
+  }, [allTransactions, map, displayMonth, manualExpenses, bankEntries, bankCategoryMap, budgets, categories])
 
   // Monthly income/expense summary
   const monthlySummary = useMemo(() => {
@@ -127,14 +140,15 @@ export function BudgetCard({ budgets, setBudget, removeBudget, map, manualExpens
 
     if (bankEntries) {
       for (const be of bankEntries) {
-        if (be.recurring && be.payment > 0 && be.vendor !== 'כרטיס אשראי') {
-          expenses += be.payment
-        }
+        if (be.payment <= 0) continue
+        if (!resolveBankCategoryId(be, bankCategoryMap ?? {})) continue
+        const key = `${be.date.getFullYear()}-${String(be.date.getMonth() + 1).padStart(2, '0')}`
+        if (key === displayMonth) expenses += be.payment
       }
     }
 
     return { income, expenses, remaining: income - expenses }
-  }, [displayMonth, manualIncome, manualExpenses, allTransactions, bankEntries])
+  }, [displayMonth, manualIncome, manualExpenses, allTransactions, bankEntries, bankCategoryMap])
 
   // Compute per-category average monthly spending (rolled up into parents)
   const avgByCategory = useMemo(() => {

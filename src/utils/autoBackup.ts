@@ -14,6 +14,7 @@ const MAX_BACKUPS = 7
 const BACKUP_KEYS = [
   'categories',
   'merchantCategoryMap',
+  'bankCategoryMap',
   'savings',
   'budgets',
   'manualEntries',
@@ -30,6 +31,7 @@ export interface BackupSnapshot {
   exportedAt: string
   categories: string | null
   merchantCategoryMap: string | null
+  bankCategoryMap: string | null
   savings: string | null
   budgets: string | null
   manualEntries: string | null
