@@ -12,7 +12,31 @@
       "WebFetch(domain:www.openbankingtracker.com)",
       "WebSearch",
       "Bash(git checkout:*)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node temp/generate-demo.mjs)",
+      "Bash(cd:*)",
+      "Bash(grep -r \"localStorage\\\\|prefers-color-scheme\\\\|@media\" /c/Users/yakij/Projects/finance-hub/src --include=*.ts --include=*.tsx --include=*.css)",
+      "Read(//c/Users/yakij/Downloads/Inspiration/**)",
+      "Skill(claude-api)",
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:data.gov.il)",
+      "WebFetch(domain:apis.cbs.gov.il)",
+      "WebFetch(domain:www.cbs.gov.il)",
+      "WebFetch(domain:api.cbs.gov.il)",
+      "Bash(start:*)",
+      "Bash(ls -1 /c/Users/yakij/projects/finance-hub/src/components/*.tsx)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(bash /c/Users/yakij/.claude/statusline-command.sh)",
+      "Skill(run)",
+      "PowerShell(Start-Process \"http://localhost:5173/finance/\")",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(npm run *)"
     ]
   }
 }
